@@ -4,11 +4,11 @@
  * Distributable under LGPL license.
  * See terms of license at gnu.org.
  */
-package net.java.sip.communicator.impl.osgi.framework;
-
-import java.util.*;
+package org.jitsi.impl.osgi.framework;
 
 import org.osgi.framework.*;
+
+import java.util.*;
 
 /**
  *

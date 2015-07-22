@@ -4,26 +4,32 @@
  * Distributable under LGPL license.
  * See terms of license at gnu.org.
  */
-package net.java.sip.communicator.impl.osgi.framework;
+package org.jitsi.impl.osgi.framework;
+
+import org.jitsi.impl.osgi.framework.launch.*;
+import org.jitsi.impl.osgi.framework.startlevel.*;
+import org.osgi.framework.*;
+import org.osgi.framework.startlevel.*;
 
 import java.io.*;
 import java.net.*;
 import java.security.cert.*;
 import java.util.*;
-
-import net.java.sip.communicator.impl.osgi.framework.launch.*;
-import net.java.sip.communicator.impl.osgi.framework.startlevel.*;
-
-import org.osgi.framework.*;
-import org.osgi.framework.startlevel.*;
+import java.util.logging.*;
 
 /**
  *
  * @author Lyubomir Marinov
+ * @author Pawel Domas
  */
 public class BundleImpl
     implements Bundle
 {
+    /**
+     * The Logger
+     */
+    private Logger logger = Logger.getLogger(BundleImpl.class.getName());
+
     private BundleActivator bundleActivator;
 
     private BundleContext bundleContext;
@@ -159,8 +165,7 @@ public class BundleImpl
 
     public ServiceReference<?>[] getRegisteredServices()
     {
-        // TODO Auto-generated method stub
-        return null;
+        return framework.getRegisteredServices();
     }
 
     public URL getResource(String name)
@@ -289,6 +294,9 @@ public class BundleImpl
             }
             catch (Throwable t)
             {
+                logger.log(Level.SEVERE,
+                           "Error starting bundle: "+bundleActivator, t);
+
                 if (t instanceof ThreadDeath)
                     throw (ThreadDeath) t;
                 else

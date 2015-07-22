@@ -4,26 +4,39 @@
  * Distributable under LGPL license.
  * See terms of license at gnu.org.
  */
-package net.java.sip.communicator.impl.osgi.framework.launch;
+package org.jitsi.impl.osgi.framework.launch;
+
+import org.jitsi.impl.osgi.framework.*;
+import org.jitsi.impl.osgi.framework.startlevel.*;
+import org.osgi.framework.*;
+import org.osgi.framework.Filter;
+import org.osgi.framework.launch.*;
+import org.osgi.framework.startlevel.*;
 
 import java.io.*;
 import java.util.*;
-
-import net.java.sip.communicator.impl.osgi.framework.*;
-
-import net.java.sip.communicator.impl.osgi.framework.startlevel.*;
-import org.osgi.framework.*;
-import org.osgi.framework.launch.*;
-import org.osgi.framework.startlevel.*;
+import java.util.logging.*;
 
 /**
  *
  * @author Lyubomir Marinov
+ * @author Pawel Domas
  */
 public class FrameworkImpl
     extends BundleImpl
     implements Framework
 {
+    /**
+     *
+     */
+    public static boolean killAfterShutdown = false;
+
+    /**
+     * The logger
+     */
+    private final Logger logger
+        = Logger.getLogger(FrameworkImpl.class.getName());
+
     private final List<BundleImpl> bundles = new LinkedList<BundleImpl>();
 
     private final Map<String, String> configuration;
@@ -116,6 +129,7 @@ public class FrameworkImpl
                     {
                         // TODO Auto-generated method stub
                     }
+                    logger.log(Level.SEVERE, "Error firing framework event", t);
                 }
         }
     }
@@ -171,11 +185,11 @@ public class FrameworkImpl
     {
         Filter classNameFilter
             = FrameworkUtil.createFilter(
-                    '('
-                        + Constants.OBJECTCLASS
-                        + '='
-                        + ((className == null) ? '*' : className)
-                        + ')');
+            '('
+                + Constants.OBJECTCLASS
+                + '='
+                + ((className == null) ? '*' : className)
+                + ')');
         List<ServiceReference> serviceReferences
             = new LinkedList<ServiceReference>();
 
@@ -450,6 +464,8 @@ public class FrameworkImpl
                     if (t instanceof ThreadDeath)
                         throw (ThreadDeath) t;
                     // TODO Auto-generated method stub
+
+                    logger.log(Level.SEVERE, "Error changing start level", t);
                 }
             }
         }
@@ -474,6 +490,8 @@ public class FrameworkImpl
                     if (t instanceof ThreadDeath)
                         throw (ThreadDeath) t;
                     // TODO Auto-generated method stub
+
+                    logger.log(Level.SEVERE, "Error changing start level", t);
                 }
             }
         }
@@ -554,6 +572,12 @@ public class FrameworkImpl
                 }
 
                 framework.setState(RESOLVED);
+                if (killAfterShutdown)
+                {
+                    // Kills the process to clear static fields,
+                    // before next restart
+                    System.exit(0);
+                }
             }
         }
             .start();
@@ -578,6 +602,19 @@ public class FrameworkImpl
         }
         else
             throw new IllegalStateException("serviceRegistrations");
+    }
+
+    public ServiceReference<?>[] getRegisteredServices()
+    {
+        ServiceReference<?>[] references
+                = new ServiceReference[serviceRegistrations.size()];
+
+        for(int i=0; i<serviceRegistrations.size(); i++)
+        {
+            references[i] = serviceRegistrations.get(i).getReference();
+        }
+
+        return references;
     }
 
     public FrameworkEvent waitForStop(long timeout)

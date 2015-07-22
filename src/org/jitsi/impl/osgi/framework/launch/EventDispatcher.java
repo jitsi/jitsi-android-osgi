@@ -4,21 +4,25 @@
  * Distributable under LGPL license.
  * See terms of license at gnu.org.
  */
-package net.java.sip.communicator.impl.osgi.framework.launch;
+package org.jitsi.impl.osgi.framework.launch;
+
+import org.jitsi.impl.osgi.framework.*;
+import org.osgi.framework.*;
 
 import java.util.*;
 import java.util.concurrent.*;
-
-import net.java.sip.communicator.impl.osgi.framework.*;
-
-import org.osgi.framework.*;
+import java.util.logging.*;
 
 /**
  *
  * @author Lyubomir Marinov
+ * @author Pawel Domas
  */
 public class EventDispatcher
 {
+    private static final Logger logger
+            = Logger.getLogger(EventDispatcher.class.getName());
+
     private final AsyncExecutor<Command> executor
         = new AsyncExecutor<Command>();
 
@@ -46,10 +50,11 @@ public class EventDispatcher
         if (listeners.length != 0)
             try
             {
-                executor.execute(new Command(clazz, listeners, event));
+                executor.execute(new Command(clazz, event));
             }
             catch (RejectedExecutionException ree)
             {
+                logger.log(Level.SEVERE, "Error firing event", ree);
             }
     }
 
@@ -83,20 +88,21 @@ public class EventDispatcher
 
         private final EventObject event;
 
-        private final EventListener[] listeners;
-
         public <T extends EventListener> Command(
                 Class<T> clazz,
-                T[] listeners,
                 EventObject event)
         {
             this.clazz = clazz;
-            this.listeners = listeners;
             this.event = event;
         }
 
         public void run()
         {
+            // Fetches listeners before command is started
+            // to get latest version of the list
+            EventListener[] listeners
+                    = EventDispatcher.this.listeners.getListeners(clazz);
+
             for (EventListener listener : listeners)
             {
                 try
@@ -114,6 +120,7 @@ public class EventDispatcher
                 }
                 catch (Throwable t)
                 {
+                    logger.log(Level.SEVERE, "Error dispatching event", t);
                     if (FrameworkListener.class.equals(clazz)
                             && ((FrameworkEvent) event).getType()
                                     != FrameworkEvent.ERROR)

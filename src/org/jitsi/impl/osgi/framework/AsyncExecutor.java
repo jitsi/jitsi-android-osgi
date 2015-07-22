@@ -4,10 +4,11 @@
  * Distributable under LGPL license.
  * See terms of license at gnu.org.
  */
-package net.java.sip.communicator.impl.osgi.framework;
+package org.jitsi.impl.osgi.framework;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.logging.*;
 
 /**
  *
@@ -240,7 +241,10 @@ public class AsyncExecutor<T extends Runnable>
 
     protected void uncaughtException(T command, Throwable exception)
     {
-        // TODO Auto-generated method stub
+        Logger.getLogger(AsyncExecutor.class.getName())
+                .log(Level.SEVERE,
+                     "Error executing command " + command,
+                     exception);
     }
 
     private static class CommandFuture<T extends Runnable>
