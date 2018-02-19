@@ -45,7 +45,7 @@ public class OSGiTest
     @Test
     public void osgiLauncherTest()
     {
-        OSGiLauncher launcher = new OSGiLauncher(bundles);
+        OSGiLauncher launcher = new OSGiLauncher(bundles, ClassLoader.getSystemClassLoader());
 
         MockBundleActivator activator1 = new MockBundleActivator();
 
