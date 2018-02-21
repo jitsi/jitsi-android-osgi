@@ -31,7 +31,8 @@ public class FrameworkFactoryImpl
 
     private final ClassLoader classLoader;
 
-    public FrameworkFactoryImpl(ClassLoader classLoader) {
+    public FrameworkFactoryImpl(ClassLoader classLoader)
+    {
         this.classLoader = classLoader;
     }
 
