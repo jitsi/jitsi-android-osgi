@@ -21,6 +21,10 @@ import org.junit.*;
 import org.junit.runner.*;
 import org.junit.runners.*;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 import static org.junit.Assert.*;
 
 /**
@@ -42,10 +46,26 @@ public class OSGiTest
             },
         };
 
+    private ClassLoader getClassLoader() {
+        ClassLoader cl;
+        //JDK 9
+        try
+        {
+            Method getPlatformClassLoader = ClassLoader.class.getMethod("getPlatformClassLoader");
+            cl = (ClassLoader) getPlatformClassLoader.invoke(null);
+        }
+        catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException t)
+        {
+            // pre-JDK9
+            cl = ClassLoader.getSystemClassLoader();
+        }
+        return cl;
+    }
+
     @Test
     public void osgiLauncherTest()
     {
-        OSGiLauncher launcher = new OSGiLauncher(bundles, ClassLoader.getSystemClassLoader());
+        OSGiLauncher launcher = new OSGiLauncher(bundles, getClassLoader());
 
         MockBundleActivator activator1 = new MockBundleActivator();
 
