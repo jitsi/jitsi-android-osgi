@@ -28,8 +28,17 @@ import java.util.*;
 public class FrameworkFactoryImpl
     implements FrameworkFactory
 {
+
+    private final ClassLoader classLoader;
+
+    public FrameworkFactoryImpl(ClassLoader classLoader)
+    {
+        this.classLoader = classLoader;
+    }
+
+
     public Framework newFramework(Map<String, String> configuration)
     {
-        return new FrameworkImpl(configuration);
+        return new FrameworkImpl(configuration, classLoader);
     }
 }

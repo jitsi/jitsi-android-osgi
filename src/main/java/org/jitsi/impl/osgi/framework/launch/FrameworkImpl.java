@@ -63,9 +63,9 @@ public class FrameworkImpl
     private final List<ServiceRegistrationImpl> serviceRegistrations
         = new LinkedList<ServiceRegistrationImpl>();
 
-    public FrameworkImpl(Map<String, String> configuration)
+    public FrameworkImpl(Map<String, String> configuration, ClassLoader classLoader)
     {
-        super(null, 0, null);
+        super(null, 0, null, classLoader);
 
         this.configuration = configuration;
 
@@ -270,7 +270,8 @@ public class FrameworkImpl
                     = new BundleImpl(
                             getFramework(),
                             getNextBundleId(),
-                            location);
+                            location,
+                            classLoader);
                 bundles.add(bundle);
                 fireBundleEvent = true;
             }

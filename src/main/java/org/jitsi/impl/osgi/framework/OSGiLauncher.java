@@ -47,6 +47,8 @@ public class OSGiLauncher
      */
     private final java.lang.String[][] bundles;
 
+    private final ClassLoader classLoader;
+
     /**
      * The <tt>org.osgi.framework.launch.Framework</tt> instance which
      * represents the launched OSGi instance.
@@ -62,9 +64,10 @@ public class OSGiLauncher
      *                level, second dimension is list of activators for given
      *                level.
      */
-    public OSGiLauncher(String[][] bundles)
+    public OSGiLauncher(String[][] bundles, ClassLoader classLoader)
     {
         this.bundles = bundles;
+        this.classLoader = classLoader;
     }
 
     /**
@@ -80,7 +83,7 @@ public class OSGiLauncher
         if (framework != null)
             return;
 
-        FrameworkFactory frameworkFactory = new FrameworkFactoryImpl();
+        FrameworkFactory frameworkFactory = new FrameworkFactoryImpl(classLoader);
         Map<String, String> configuration = new HashMap<String, String>();
 
         configuration.put(

@@ -53,13 +53,16 @@ public class BundleImpl
 
     private final String location;
 
+    protected final ClassLoader classLoader;
+
     private int state = INSTALLED;
 
-    public BundleImpl(FrameworkImpl framework, long bundleId, String location)
+    public BundleImpl(FrameworkImpl framework, long bundleId, String location, ClassLoader classLoader)
     {
         this.framework = framework;
         this.bundleId = bundleId;
         this.location = location;
+        this.classLoader = classLoader;
     }
 
     public <A> A adapt(Class<A> type)
@@ -231,7 +234,7 @@ public class BundleImpl
     public Class<?> loadClass(String name)
         throws ClassNotFoundException
     {
-        return Class.forName(name);
+        return classLoader.loadClass(name);
     }
 
     protected void setBundleContext(BundleContext bundleContext)
