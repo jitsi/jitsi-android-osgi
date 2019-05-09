@@ -1,7 +1,5 @@
 /*
- * Jitsi, the OpenSource Java VoIP and Instant Messaging client.
- *
- * Copyright @ 2015 Atlassian Pty Ltd
+ * Copyright @ 2018 - present 8x8, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,10 +18,6 @@ package org.jitsi.impl.osgi.framework;
 import org.junit.*;
 import org.junit.runner.*;
 import org.junit.runners.*;
-
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 
 import static org.junit.Assert.*;
 
@@ -46,26 +40,11 @@ public class OSGiTest
             },
         };
 
-    private ClassLoader getClassLoader() {
-        ClassLoader cl;
-        //JDK 9
-        try
-        {
-            Method getPlatformClassLoader = ClassLoader.class.getMethod("getPlatformClassLoader");
-            cl = (ClassLoader) getPlatformClassLoader.invoke(null);
-        }
-        catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException t)
-        {
-            // pre-JDK9
-            cl = ClassLoader.getSystemClassLoader();
-        }
-        return cl;
-    }
-
     @Test
     public void osgiLauncherTest()
     {
-        OSGiLauncher launcher = new OSGiLauncher(bundles, getClassLoader());
+        OSGiLauncher launcher
+            = new OSGiLauncher(bundles, ClassLoader.getSystemClassLoader());
 
         MockBundleActivator activator1 = new MockBundleActivator();
 
