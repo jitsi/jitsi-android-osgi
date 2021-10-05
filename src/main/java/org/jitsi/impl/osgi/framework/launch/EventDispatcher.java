@@ -23,6 +23,7 @@ import org.osgi.framework.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.*;
+import org.osgi.framework.Filter;
 
 /**
  *
@@ -40,11 +41,12 @@ public class EventDispatcher
     private final EventListenerList listeners = new EventListenerList();
 
     public <T extends EventListener> boolean addListener(
-            Bundle bundle,
-            Class<T> clazz,
-            T listener)
+        Bundle bundle,
+        Class<T> clazz,
+        T listener,
+        Filter filter)
     {
-        return listeners.add(bundle, clazz, listener);
+        return listeners.add(bundle, clazz, listener, filter);
     }
 
     void fireBundleEvent(BundleEvent event)
@@ -56,17 +58,14 @@ public class EventDispatcher
             Class<T> clazz,
             EventObject event)
     {
-        T[] listeners = this.listeners.getListeners(clazz);
-
-        if (listeners.length != 0)
-            try
-            {
-                executor.execute(new Command(clazz, event));
-            }
-            catch (RejectedExecutionException ree)
-            {
-                logger.log(Level.SEVERE, "Error firing event", ree);
-            }
+        try
+        {
+            executor.execute(new Command(clazz, event));
+        }
+        catch (RejectedExecutionException ree)
+        {
+            logger.log(Level.SEVERE, "Error firing event", ree);
+        }
     }
 
     void fireServiceEvent(ServiceEvent event)
@@ -111,8 +110,8 @@ public class EventDispatcher
         {
             // Fetches listeners before command is started
             // to get latest version of the list
-            EventListener[] listeners
-                    = EventDispatcher.this.listeners.getListeners(clazz);
+            List<? extends EventListener> listeners
+                    = EventDispatcher.this.listeners.getListeners(clazz, event);
 
             for (EventListener listener : listeners)
             {

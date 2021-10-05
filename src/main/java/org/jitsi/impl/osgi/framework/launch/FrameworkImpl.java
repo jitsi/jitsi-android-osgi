@@ -99,7 +99,8 @@ public class FrameworkImpl
     public void addBundleListener(BundleImpl origin, BundleListener listener)
     {
         if (eventDispatcher != null)
-            eventDispatcher.addListener(origin, BundleListener.class, listener);
+            eventDispatcher.addListener(origin, BundleListener.class, listener,
+                null);
     }
 
     public void addServiceListener(
@@ -108,7 +109,8 @@ public class FrameworkImpl
             Filter filter)
     {
         if (eventDispatcher != null)
-            eventDispatcher.addListener(origin, ServiceListener.class, listener);
+            eventDispatcher.addListener(origin, ServiceListener.class, listener,
+                filter);
     }
 
     public void fireBundleEvent(int type, Bundle bundle)
