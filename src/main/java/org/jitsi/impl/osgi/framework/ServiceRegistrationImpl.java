@@ -25,8 +25,8 @@ import java.util.*;
  *
  * @author Lyubomir Marinov
  */
-public class ServiceRegistrationImpl
-    implements ServiceRegistration
+public class ServiceRegistrationImpl<S>
+    implements ServiceRegistration<S>
 {
     private static final Comparator<String> CASE_INSENSITIVE_COMPARATOR
         = new Comparator<String>()
@@ -46,9 +46,9 @@ public class ServiceRegistrationImpl
 
     private final Map<String, Object> properties;
 
-    private Object service;
+    private final S service;
 
-    private final Long serviceId;
+    private final long serviceId;
 
     private final ServiceReferenceImpl serviceReference
         = new ServiceReferenceImpl();
@@ -57,7 +57,7 @@ public class ServiceRegistrationImpl
             BundleImpl bundle,
             long serviceId,
             String[] classNames,
-            Object service,
+            S service,
             Dictionary<String, ?> properties)
     {
         this.bundle = bundle;
@@ -93,47 +93,72 @@ public class ServiceRegistrationImpl
         }
     }
 
-    public ServiceReferenceImpl getReference()
+    @Override
+    public ServiceReference<S> getReference()
     {
         return serviceReference;
     }
 
-    public ServiceReference getReference(Class<?> clazz)
+    public ServiceReference<S> getReference(Class<S> clazz)
     {
         return serviceReference;
     }
 
     private static Map<String, Object> newCaseInsensitiveMapInstance()
     {
-        return new TreeMap<String, Object>(CASE_INSENSITIVE_COMPARATOR);
+        return new TreeMap<>(String::compareToIgnoreCase);
     }
 
+    @Override
     public void setProperties(Dictionary properties)
     {
         // TODO Auto-generated method stub
     }
 
+    @Override
     public void unregister()
     {
         bundle.getFramework().unregisterService(bundle, this);
     }
 
-    class ServiceReferenceImpl
-        implements ServiceReference
+    class ServiceReferenceImpl implements ServiceReference<S>
     {
+        @Override
         public int compareTo(Object other)
         {
-            Long thisServiceId = ServiceRegistrationImpl.this.serviceId;
-            Long otherServiceId = ((ServiceRegistrationImpl) other).serviceId;
+            Long otherServiceId = ((ServiceRegistrationImpl<S>) other).serviceId;
 
-            return otherServiceId.compareTo(thisServiceId);
+            return otherServiceId.compareTo(
+                ServiceRegistrationImpl.this.serviceId);
         }
 
+        @Override
+        public Dictionary<String, Object> getProperties()
+        {
+            synchronized (properties)
+            {
+                Dictionary<String, Object> dict = new Hashtable<>(properties.size());
+                for (Map.Entry<String, Object> e : properties.entrySet())
+                {
+                    dict.put(e.getKey(), e.getValue());
+                }
+                return dict;
+            }
+        }
+
+        @Override
+        public <A> A adapt(Class<A> type)
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public Bundle getBundle()
         {
             return bundle;
         }
 
+        @Override
         public Object getProperty(String key)
         {
             Object value;
@@ -150,6 +175,7 @@ public class ServiceRegistrationImpl
             return value;
         }
 
+        @Override
         public String[] getPropertyKeys()
         {
             synchronized (properties)
@@ -171,12 +197,14 @@ public class ServiceRegistrationImpl
             return service;
         }
 
+        @Override
         public Bundle[] getUsingBundles()
         {
             // TODO Auto-generated method stub
             return null;
         }
 
+        @Override
         public boolean isAssignableTo(Bundle bundle, String className)
         {
             // TODO Auto-generated method stub
