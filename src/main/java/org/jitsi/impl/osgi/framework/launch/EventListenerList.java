@@ -31,9 +31,10 @@ public class EventListenerList
     private final List<Element<?>> elements = new LinkedList<Element<?>>();
 
     public synchronized <T extends EventListener> boolean add(
-            Bundle bundle,
-            Class<T> clazz,
-            T listener)
+        Bundle bundle,
+        Class<T> clazz,
+        T listener,
+        Filter filter)
     {
         if (bundle == null)
             throw new NullPointerException("bundle");
@@ -45,26 +46,32 @@ public class EventListenerList
         int index = indexOf(bundle, clazz, listener);
 
         if (index == -1)
-            return elements.add(new Element<T>(bundle, clazz, listener));
+            return elements.add(new Element<>(bundle, clazz, listener, filter));
         else
             return false;
     }
 
-    public synchronized <T extends EventListener> T[] getListeners(
-            Class<T> clazz)
+    @SuppressWarnings("unchecked")
+    public synchronized <T extends EventListener> List<T> getListeners(
+        Class<T> clazz, EventObject event)
     {
-        EventListener[] eventListeners = new EventListener[elements.size()];
-        int count = 0;
-
+        List<T> eventListeners = new ArrayList<>(elements.size());
         for (Element<?> element : elements)
-                if (element.clazz == clazz)
-                    eventListeners[count++] = element.listener;
+        {
+            if (element.clazz == clazz)
+            {
+                if (event instanceof ServiceEvent
+                    && element.filter != null
+                    && !element.filter.match(((ServiceEvent)event).getServiceReference()))
+                {
+                    continue;
+                }
 
-        @SuppressWarnings("unchecked")
-        T[] listeners = (T[]) Array.newInstance(clazz, count);
+                eventListeners.add((T) element.listener);
+            }
+        }
 
-        System.arraycopy(eventListeners, 0, listeners, 0, count);
-        return listeners;
+        return eventListeners;
     }
 
     private synchronized <T extends EventListener> int indexOf(
@@ -124,11 +131,14 @@ public class EventListenerList
 
         public final T listener;
 
-        public Element(Bundle bundle, Class<T> clazz, T listener)
+        public final Filter filter;
+
+        public Element(Bundle bundle, Class<T> clazz, T listener, Filter filter)
         {
             this.bundle = bundle;
             this.clazz = clazz;
             this.listener = listener;
+            this.filter = filter;
         }
     }
 }

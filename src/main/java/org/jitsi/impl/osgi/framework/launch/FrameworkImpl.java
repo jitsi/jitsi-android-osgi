@@ -60,8 +60,8 @@ public class FrameworkImpl
 
     private long nextServiceId = 1;
 
-    private final List<ServiceRegistrationImpl> serviceRegistrations
-        = new LinkedList<ServiceRegistrationImpl>();
+    private final List<ServiceRegistrationImpl<?>> serviceRegistrations
+        = new LinkedList<>();
 
     public FrameworkImpl(Map<String, String> configuration, ClassLoader classLoader)
     {
@@ -99,7 +99,8 @@ public class FrameworkImpl
     public void addBundleListener(BundleImpl origin, BundleListener listener)
     {
         if (eventDispatcher != null)
-            eventDispatcher.addListener(origin, BundleListener.class, listener);
+            eventDispatcher.addListener(origin, BundleListener.class, listener,
+                null);
     }
 
     public void addServiceListener(
@@ -108,7 +109,8 @@ public class FrameworkImpl
             Filter filter)
     {
         if (eventDispatcher != null)
-            eventDispatcher.addListener(origin, ServiceListener.class, listener);
+            eventDispatcher.addListener(origin, ServiceListener.class, listener,
+                filter);
     }
 
     public void fireBundleEvent(int type, Bundle bundle)
@@ -186,9 +188,9 @@ public class FrameworkImpl
         return bundles;
     }
 
-    public Collection<ServiceReference> getServiceReferences(
+    public <S> Collection<ServiceReference<S>> getServiceReferences(
             BundleImpl origin,
-            Class<?> clazz,
+            Class<S> clazz,
             String className,
             Filter filter,
             boolean checkAssignable)
@@ -201,23 +203,23 @@ public class FrameworkImpl
                 + '='
                 + ((className == null) ? '*' : className)
                 + ')');
-        List<ServiceReference> serviceReferences
-            = new LinkedList<ServiceReference>();
+        List<ServiceReference<S>> serviceReferences
+            = new LinkedList<>();
 
         synchronized (serviceRegistrations)
         {
-            for (ServiceRegistrationImpl serviceRegistration
+            for (ServiceRegistrationImpl<?> serviceRegistration
                     : serviceRegistrations)
             {
-                ServiceReference<?> serviceReference
-                    = serviceRegistration.getReference();
+                ServiceReference<S> serviceReference
+                    = (ServiceReference<S>) serviceRegistration.getReference();
 
                 if (classNameFilter.match(serviceReference)
                         && ((filter == null)
                                 || (filter.match(serviceReference))))
                 {
-                    ServiceReference serviceReferenceS
-                        = serviceRegistration.getReference(clazz);
+                    ServiceReference<S> serviceReferenceS
+                        = (ServiceReference<S>) serviceRegistration.getReference();
 
                     if (serviceReferenceS != null)
                         serviceReferences.add(serviceReferenceS);
@@ -239,10 +241,18 @@ public class FrameworkImpl
         return nextBundleId++;
     }
 
+    @Override
     public void init()
         throws BundleException
     {
         setState(STARTING);
+    }
+
+    @Override
+    public void init(FrameworkListener... listeners)
+        throws BundleException
+    {
+        throw new UnsupportedOperationException();
     }
 
     public Bundle installBundle(
@@ -283,11 +293,11 @@ public class FrameworkImpl
         return bundle;
     }
 
-    public ServiceRegistration registerService(
+    public <T> ServiceRegistration<T> registerService(
             BundleImpl origin,
-            Class clazz,
+            Class<T> clazz,
             String[] classNames,
-            Object service,
+            T service,
             Dictionary<String, ?> properties)
     {
         if ((classNames == null) || (classNames.length == 0))
@@ -347,7 +357,7 @@ public class FrameworkImpl
             serviceId = nextServiceId++;
         }
 
-        ServiceRegistrationImpl serviceRegistration
+        ServiceRegistrationImpl<T> serviceRegistration
             = new ServiceRegistrationImpl(
                     origin,
                     serviceId,
@@ -420,6 +430,7 @@ public class FrameworkImpl
             FrameworkListener listener
                 = new FrameworkListener()
                 {
+                    @Override
                     public void frameworkEvent(FrameworkEvent event)
                     {
                         synchronized (this)
@@ -556,6 +567,7 @@ public class FrameworkImpl
                 FrameworkListener listener
                     = new FrameworkListener()
                     {
+                        @Override
                         public void frameworkEvent(FrameworkEvent event)
                         {
                             synchronized (this)
@@ -616,6 +628,7 @@ public class FrameworkImpl
             throw new IllegalStateException("serviceRegistrations");
     }
 
+    @Override
     public ServiceReference<?>[] getRegisteredServices()
     {
         ServiceReference<?>[] references
@@ -629,6 +642,7 @@ public class FrameworkImpl
         return references;
     }
 
+    @Override
     public FrameworkEvent waitForStop(long timeout)
         throws InterruptedException
     {
