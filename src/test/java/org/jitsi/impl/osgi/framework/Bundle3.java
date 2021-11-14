@@ -19,9 +19,6 @@ package org.jitsi.impl.osgi.framework;
 
 import org.osgi.framework.*;
 
-/**
- *
- */
 public class Bundle3
     implements BundleActivator
 {

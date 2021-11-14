@@ -17,6 +17,8 @@ package org.jitsi.impl.osgi.framework;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.lang.management.*;
+import java.time.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.*;
@@ -30,7 +32,7 @@ import org.osgi.framework.startlevel.*;
 public class OSGiTest
 {
     @Test
-    @Timeout(value = 5, unit = TimeUnit.SECONDS)
+    @Timeout(value = 10)
     public void osgiLauncherTest() throws BundleException, InterruptedException
     {
         var logger = Logger.getLogger(getClass().getName());
@@ -68,9 +70,27 @@ public class OSGiTest
         fw.stop();
 
         logger.info("Waiting for framework stop");
-        assertEquals(FrameworkEvent.STOPPED, fw.waitForStop(5000).getType());
+        var fwEvent = assertTimeoutPreemptively(Duration.ofSeconds(5),
+            () -> fw.waitForStop(0),
+            () -> "Framework.state is " + fw.getState() + "\n" + threadDump(
+                true, true));
+        assertEquals(FrameworkEvent.STOPPED, fwEvent.getType());
         assertNull(Bundle1.bundleContext);
         assertNull(Bundle2.bundleContext);
         assertNull(Bundle3.bundleContext);
+    }
+
+    private static String threadDump(
+        boolean lockedMonitors,
+        boolean lockedSynchronizers)
+    {
+        var threadDump = new StringBuilder(System.lineSeparator());
+        var threadMXBean = ManagementFactory.getThreadMXBean();
+        for (ThreadInfo threadInfo : threadMXBean.dumpAllThreads(lockedMonitors,
+            lockedSynchronizers))
+        {
+            threadDump.append(threadInfo.toString());
+        }
+        return threadDump.toString();
     }
 }

@@ -530,33 +530,19 @@ public class FrameworkImpl
     public void stop(int options)
         throws BundleException
     {
-        ForkJoinPool.commonPool().execute(() ->
-        {
-            setState(STOPPING);
-
-            var startLevelAwaiter = new Semaphore(0);
-            frameworkStartLevel.internalSetStartLevel(0,
-                event -> startLevelAwaiter.release());
-            while (frameworkStartLevel.getStartLevel() != 0)
+        logger.fine("Stopping framework");
+        setState(STOPPING);
+        logger.fine("Waiting for framework stop event");
+        frameworkStartLevel.internalSetStartLevel(0,
+            event ->
             {
-                try
+                setState(RESOLVED);
+                fireFrameworkEvent(FrameworkEvent.STOPPED);
+                synchronized (stopEvent)
                 {
-                    startLevelAwaiter.acquire();
+                    stopEvent.notifyAll();
                 }
-                catch (InterruptedException ie)
-                {
-                    Thread.currentThread().interrupt();
-                    return;
-                }
-            }
-
-            setState(RESOLVED);
-            fireFrameworkEvent(FrameworkEvent.STOPPED);
-            synchronized (stopEvent)
-            {
-                stopEvent.notifyAll();
-            }
-        });
+            });
     }
 
     public void unregisterService(
@@ -604,8 +590,13 @@ public class FrameworkImpl
         var timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeout);
         synchronized (stopEvent)
         {
-            while (getState() != RESOLVED
-                && (System.nanoTime() - start) > timeoutNanos)
+            if (timeout > 0 && (System.nanoTime() - start) > timeoutNanos)
+            {
+                return new FrameworkEvent(FrameworkEvent.WAIT_TIMEDOUT, this,
+                    null);
+            }
+
+            while (getState() != RESOLVED)
             {
                 stopEvent.wait(timeout);
             }
