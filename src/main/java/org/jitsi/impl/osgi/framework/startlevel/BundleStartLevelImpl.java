@@ -21,7 +21,6 @@ import org.jitsi.impl.osgi.framework.*;
 import org.osgi.framework.startlevel.*;
 
 /**
- *
  * @author Lyubomir Marinov
  */
 public class BundleStartLevelImpl
@@ -36,11 +35,13 @@ public class BundleStartLevelImpl
         this.bundle = bundle;
     }
 
+    @Override
     public BundleImpl getBundle()
     {
         return bundle;
     }
 
+    @Override
     public int getStartLevel()
     {
         int startLevel = this.startLevel;
@@ -51,29 +52,36 @@ public class BundleStartLevelImpl
                 = getBundle().getFramework().adapt(FrameworkStartLevel.class);
 
             if (frameworkStartLevel == null)
+            {
                 startLevel = 1;
+            }
             else
+            {
                 startLevel = frameworkStartLevel.getInitialBundleStartLevel();
+            }
         }
         return startLevel;
     }
 
+    @Override
     public boolean isActivationPolicyUsed()
     {
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
+    @Override
     public boolean isPersistentlyStarted()
     {
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
+    @Override
     public void setStartLevel(int startLevel)
     {
         if ((startLevel <= 0) || (getBundle().getBundleId() == 0))
+        {
             throw new IllegalArgumentException("startLevel");
+        }
 
         this.startLevel = startLevel;
     }

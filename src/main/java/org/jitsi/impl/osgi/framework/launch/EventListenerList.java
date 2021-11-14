@@ -17,18 +17,15 @@
  */
 package org.jitsi.impl.osgi.framework.launch;
 
+import java.util.*;
 import org.osgi.framework.*;
 
-import java.lang.reflect.*;
-import java.util.*;
-
 /**
- *
  * @author Lyubomir Marinov
  */
 public class EventListenerList
 {
-    private final List<Element<?>> elements = new LinkedList<Element<?>>();
+    private final List<Element<?>> elements = new LinkedList<>();
 
     public synchronized <T extends EventListener> boolean add(
         Bundle bundle,
@@ -37,18 +34,28 @@ public class EventListenerList
         Filter filter)
     {
         if (bundle == null)
+        {
             throw new NullPointerException("bundle");
+        }
         if (clazz == null)
+        {
             throw new NullPointerException("clazz");
+        }
         if (listener == null)
+        {
             throw new NullPointerException("listener");
+        }
 
         int index = indexOf(bundle, clazz, listener);
 
         if (index == -1)
+        {
             return elements.add(new Element<>(bundle, clazz, listener, filter));
+        }
         else
+        {
             return false;
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -62,7 +69,8 @@ public class EventListenerList
             {
                 if (event instanceof ServiceEvent
                     && element.filter != null
-                    && !element.filter.match(((ServiceEvent)event).getServiceReference()))
+                    && !element.filter.match(
+                    ((ServiceEvent) event).getServiceReference()))
                 {
                     continue;
                 }
@@ -75,31 +83,35 @@ public class EventListenerList
     }
 
     private synchronized <T extends EventListener> int indexOf(
-            Bundle bundle,
-            Class<T> clazz,
-            T listener)
+        Bundle bundle,
+        Class<T> clazz,
+        T listener)
     {
         for (int index = 0, count = elements.size(); index < count; index++)
         {
             Element<?> element = elements.get(index);
 
             if (element.bundle.equals(bundle)
-                    && (element.clazz == clazz)
-                    && (element.listener == listener))
+                && (element.clazz == clazz)
+                && (element.listener == listener))
+            {
                 return index;
+            }
         }
         return -1;
     }
 
     public synchronized <T extends EventListener> boolean remove(
-            Bundle bundle,
-            Class<T> clazz,
-            T listener)
+        Bundle bundle,
+        Class<T> clazz,
+        T listener)
     {
         int index = indexOf(bundle, clazz, listener);
 
         if (index == -1)
+        {
             return false;
+        }
         else
         {
             elements.remove(index);
@@ -111,13 +123,17 @@ public class EventListenerList
     {
         boolean changed = false;
 
-        for (int index = 0, count = elements.size(); index < count;)
+        for (int index = 0, count = elements.size(); index < count; )
         {
             if (elements.get(index).bundle.equals(bundle)
-                    && (elements.remove(index) != null))
+                && (elements.remove(index) != null))
+            {
                 changed = true;
+            }
             else
+            {
                 index++;
+            }
         }
 
         return changed;

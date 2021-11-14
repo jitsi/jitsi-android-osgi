@@ -17,37 +17,42 @@
  */
 package org.jitsi.impl.osgi.framework;
 
-import org.jitsi.impl.osgi.framework.launch.*;
-import org.jitsi.impl.osgi.framework.startlevel.*;
-import org.osgi.framework.*;
-import org.osgi.framework.startlevel.*;
-
 import java.io.*;
 import java.net.*;
+import java.nio.file.*;
 import java.security.cert.*;
 import java.util.*;
 import java.util.logging.*;
+import java.util.zip.*;
+import org.apache.commons.io.file.*;
+import org.apache.commons.io.filefilter.*;
+import org.jitsi.impl.osgi.framework.launch.*;
+import org.jitsi.impl.osgi.framework.startlevel.*;
+import org.jitsi.osgi.framework.*;
+import org.osgi.framework.*;
+import org.osgi.framework.startlevel.*;
 
 /**
- *
  * @author Lyubomir Marinov
  * @author Pawel Domas
  */
 public class BundleImpl
-    implements Bundle
+    implements Bundle, BundleActivatorHolder
 {
-    /**
-     * The Logger
-     */
-    private Logger logger = Logger.getLogger(BundleImpl.class.getName());
+    private static final Logger logger =
+        Logger.getLogger(BundleImpl.class.getName());
 
-    private BundleActivator bundleActivator;
+    private final List<Class<? extends BundleActivator>>
+        bundleActivatorClasses = new ArrayList<>();
+
+    private final List<BundleActivator> bundleActivators = new ArrayList<>();
 
     private BundleContext bundleContext;
 
     private final long bundleId;
 
-    private BundleStartLevel bundleStartLevel;
+    private final BundleStartLevel bundleStartLevel =
+        new BundleStartLevelImpl(this);
 
     private final FrameworkImpl framework;
 
@@ -55,9 +60,10 @@ public class BundleImpl
 
     protected final ClassLoader classLoader;
 
-    private int state = INSTALLED;
+    private volatile int state = INSTALLED;
 
-    public BundleImpl(FrameworkImpl framework, long bundleId, String location, ClassLoader classLoader)
+    public BundleImpl(FrameworkImpl framework, long bundleId, String location,
+        ClassLoader classLoader)
     {
         this.framework = framework;
         this.bundleId = bundleId;
@@ -65,52 +71,173 @@ public class BundleImpl
         this.classLoader = classLoader;
     }
 
+    @SuppressWarnings("unchecked")
     public <A> A adapt(Class<A> type)
     {
-        Object adapt;
-
         if (BundleStartLevel.class.equals(type))
         {
             if (getBundleId() == 0)
-                adapt = null;
+            {
+                return null;
+            }
             else
-                synchronized (this)
-                {
-                    if (bundleStartLevel == null)
-                        bundleStartLevel = new BundleStartLevelImpl(this);
-
-                    adapt = bundleStartLevel;
-                }
+            {
+                return (A) bundleStartLevel;
+            }
         }
-        else
-            adapt = null;
+        else if (BundleActivatorHolder.class.equals(type))
+        {
+            return (A) this;
+        }
 
-        @SuppressWarnings("unchecked")
-        A a = (A) adapt;
-
-        return a;
+        return null;
     }
 
     public int compareTo(Bundle other)
     {
         long thisBundleId = getBundleId();
         long otherBundleId = other.getBundleId();
-
-        if (thisBundleId < otherBundleId)
-            return -1;
-        else if (thisBundleId == otherBundleId)
-            return 0;
-        else
-            return 1;
+        return Long.compare(thisBundleId, otherBundleId);
     }
 
     public Enumeration<URL> findEntries(
-            String path,
-            String filePattern,
-            boolean recurse)
+        String path,
+        String filePattern,
+        boolean recurse)
     {
-        // TODO Auto-generated method stub
+        File f;
+        try
+        {
+            f = new File(new URI(location));
+        }
+        catch (URISyntaxException e)
+        {
+            logger.log(Level.SEVERE,
+                "Could not get bundle URI from " + location, e);
+            return null;
+        }
+        if (f.exists())
+        {
+            if (path.startsWith("/"))
+            {
+                path = path.substring(1);
+            }
+            if (!path.endsWith("/"))
+            {
+                path += "/";
+            }
+
+            Iterator<URL> matches;
+            if (f.isFile() && f.getName().endsWith(".jar"))
+            {
+                matches = getJarEntries(path, filePattern, recurse, f);
+            }
+            else if (f.isDirectory())
+            {
+                matches = getDirectoryEntries(path, filePattern, f);
+            }
+            else
+            {
+                logger.log(Level.SEVERE,
+                    location + " is neither a file nor a directory");
+                return null;
+            }
+
+            if (matches == null)
+            {
+                return null;
+            }
+
+            return new Enumeration<>()
+            {
+                @Override
+                public boolean hasMoreElements()
+                {
+                    return matches.hasNext();
+                }
+
+                @Override
+                public URL nextElement()
+                {
+                    return matches.next();
+                }
+            };
+        }
         return null;
+    }
+
+    private Iterator<URL> getJarEntries(String path, String filePattern,
+        boolean recurse, File f)
+    {
+        try
+        {
+            var z = new ZipFile(f);
+            var filter = new WildcardFileFilter(
+                filePattern == null ? "*" : filePattern);
+            return z.stream()
+                .filter(e -> recurse
+                    ? e.getName().startsWith(path)
+                    : e.getName().equals(path)
+                        && filter.accept(new File(e.getName()))
+                )
+                .map(e -> {
+                    try
+                    {
+                        return new URL(e.getName());
+                    }
+                    catch (MalformedURLException ex)
+                    {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .iterator();
+        }
+        catch (IOException e)
+        {
+            logger.log(Level.SEVERE, "Could not open " + location, e);
+            return null;
+        }
+    }
+
+    private Iterator<URL> getDirectoryEntries(String path, String filePattern,
+        File f)
+    {
+        var fileFilter = new WildcardFileFilter(
+            filePattern == null ? "*" : filePattern);
+        var visitor = AccumulatorPathVisitor.withLongCounters(fileFilter,
+            FileFilterUtils.trueFileFilter());
+        try
+        {
+            Files.walkFileTree(new File(f, path).toPath(), visitor);
+        }
+        catch (IOException e)
+        {
+            logger.log(Level.SEVERE, "Could not walk files in " + location, e);
+            return null;
+        }
+
+        if (!visitor.getFileList().isEmpty())
+        {
+            return visitor.getFileList().stream()
+                .map(r ->
+                {
+                    try
+                    {
+                        return r.toUri().toURL();
+                    }
+                    catch (MalformedURLException e)
+                    {
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .iterator();
+        }
+        else
+        {
+            return null;
+        }
     }
 
     public BundleContext getBundleContext()
@@ -133,20 +260,17 @@ public class BundleImpl
 
     public File getDataFile(String filename)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public URL getEntry(String path)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public Enumeration<String> getEntryPaths(String path)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public FrameworkImpl getFramework()
@@ -161,20 +285,18 @@ public class BundleImpl
 
     public Dictionary<String, String> getHeaders(String locale)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public long getLastModified()
     {
-        // TODO Auto-generated method stub
-        return 0;
+        throw new UnsupportedOperationException();
     }
 
     public String getLocation()
     {
         return
-            (getBundleId() == 0) ? Constants.SYSTEM_BUNDLE_LOCATION : location;
+            getBundleId() == 0 ? Constants.SYSTEM_BUNDLE_LOCATION : location;
     }
 
     public ServiceReference<?>[] getRegisteredServices()
@@ -184,28 +306,23 @@ public class BundleImpl
 
     public URL getResource(String name)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public Enumeration<URL> getResources(String name)
-        throws IOException
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public ServiceReference<?>[] getServicesInUse()
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public Map<X509Certificate, List<X509Certificate>> getSignerCertificates(
-            int signersType)
+        int signersType)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public int getState()
@@ -215,20 +332,17 @@ public class BundleImpl
 
     public String getSymbolicName()
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public Version getVersion()
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     public boolean hasPermission(Object permission)
     {
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     public Class<?> loadClass(String name)
@@ -253,7 +367,9 @@ public class BundleImpl
             int newState = getState();
 
             if (oldState != newState)
+            {
                 stateChanged(oldState, newState);
+            }
         }
     }
 
@@ -267,69 +383,67 @@ public class BundleImpl
         throws BundleException
     {
         if (getState() == UNINSTALLED)
+        {
             throw new IllegalStateException("Bundle.UNINSTALLED");
+        }
 
         BundleStartLevel bundleStartLevel = adapt(BundleStartLevel.class);
         FrameworkStartLevel frameworkStartLevel
             = getFramework().adapt(FrameworkStartLevel.class);
 
-        if ((bundleStartLevel != null)
-                && (bundleStartLevel.getStartLevel()
-                        > frameworkStartLevel.getStartLevel()))
+        if (bundleStartLevel != null
+            && bundleStartLevel.getStartLevel()
+            > frameworkStartLevel.getStartLevel())
         {
             if ((options & START_TRANSIENT) == START_TRANSIENT)
+            {
                 throw new BundleException("startLevel");
+            }
             else
+            {
                 return;
+            }
         }
 
         if (getState() == ACTIVE)
+        {
             return;
+        }
 
         if (getState() == INSTALLED)
+        {
             setState(RESOLVED);
+        }
 
         setState(STARTING);
-
-        String location = getLocation();
-
-        if (location != null)
+        try
         {
-            BundleActivator bundleActivator = null;
-            Throwable exception = null;
-
-            try
+            for (var activatorClass : bundleActivatorClasses)
             {
-                bundleActivator
-                    = (BundleActivator)
-                        loadClass(location.replace('/', '.')).newInstance();
-
-                bundleActivator.start(getBundleContext());
+                logger.log(Level.INFO,
+                    "Starting activator " + activatorClass.getName()
+                        + " in " + location);
+                var activator =
+                    activatorClass.getDeclaredConstructor().newInstance();
+                activator.start(getBundleContext());
+                bundleActivators.add(activator);
             }
-            catch (Throwable t)
-            {
-                logger.log(Level.SEVERE,
-                           "Error starting bundle: "+bundleActivator, t);
+        }
+        catch (Exception t)
+        {
+            logger.log(Level.SEVERE,
+                "Error starting bundle: " + getLocation(), t);
 
-                if (t instanceof ThreadDeath)
-                    throw (ThreadDeath) t;
-                else
-                    exception = t;
-            }
-
-            if (exception == null)
-                this.bundleActivator = bundleActivator;
-            else
-            {
-                setState(STOPPING);
-                setState(RESOLVED);
-                getFramework().fireBundleEvent(BundleEvent.STOPPED, this);
-                throw new BundleException("BundleActivator.start", exception);
-            }
+            setState(STOPPING);
+            setState(RESOLVED);
+            getFramework().fireBundleEvent(BundleEvent.STOPPED, this);
+            throw new BundleException("BundleActivator.start", t);
         }
 
         if (getState() == UNINSTALLED)
+        {
             throw new IllegalStateException("Bundle.UNINSTALLED");
+        }
 
         setState(ACTIVE);
     }
@@ -369,6 +483,7 @@ public class BundleImpl
         stop(0);
     }
 
+    @SuppressWarnings("fallthrough")
     public void stop(int options)
         throws BundleException
     {
@@ -383,30 +498,32 @@ public class BundleImpl
 
             Throwable exception = null;
 
-            if (wasActive && (bundleActivator != null))
+            if (wasActive)
             {
-                try
+                for (var activator : bundleActivators)
                 {
-                    bundleActivator.stop(getBundleContext());
-                }
-                catch (Throwable t)
-                {
-                    if (t instanceof ThreadDeath)
-                        throw (ThreadDeath) t;
-                    else
+                    try
+                    {
+                        activator.stop(getBundleContext());
+                    }
+                    catch (Exception t)
+                    {
                         exception = t;
+                    }
                 }
-                this.bundleActivator = null;
             }
 
             if (getState() == UNINSTALLED)
+            {
                 throw new BundleException("Bundle.UNINSTALLED");
+            }
 
             setState(RESOLVED);
             getFramework().fireBundleEvent(BundleEvent.STOPPED, this);
-
             if (exception != null)
+            {
                 throw new BundleException("BundleActivator.stop", exception);
+            }
             break;
 
         case UNINSTALLED:
@@ -417,9 +534,8 @@ public class BundleImpl
     }
 
     public void uninstall()
-        throws BundleException
     {
-        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException();
     }
 
     public void update()
@@ -431,6 +547,13 @@ public class BundleImpl
     public void update(InputStream input)
         throws BundleException
     {
-        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public void addBundleActivator(
+        Class<? extends BundleActivator> activatorClass)
+    {
+        bundleActivatorClasses.add(activatorClass);
     }
 }

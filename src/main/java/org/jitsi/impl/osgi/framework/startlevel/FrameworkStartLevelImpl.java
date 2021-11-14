@@ -17,87 +17,84 @@
  */
 package org.jitsi.impl.osgi.framework.startlevel;
 
-import org.jitsi.impl.osgi.framework.*;
+import java.util.concurrent.*;
 import org.jitsi.impl.osgi.framework.launch.*;
 import org.osgi.framework.*;
 import org.osgi.framework.startlevel.*;
 
-import java.util.concurrent.*;
-
 /**
- *
  * @author Lyubomir Marinov
  */
 public class FrameworkStartLevelImpl
     implements FrameworkStartLevel
 {
-    private final BundleImpl bundle;
-
-    private final AsyncExecutor<Command> executor
-        = new AsyncExecutor<Command>(5, TimeUnit.MINUTES);
+    private final FrameworkImpl framework;
 
     private int initialBundleStartLevel = 0;
 
     private int startLevel;
 
-    public FrameworkStartLevelImpl(BundleImpl bundle)
+    public FrameworkStartLevelImpl(FrameworkImpl framework)
     {
-        this.bundle = bundle;
+        this.framework = framework;
     }
 
-    public BundleImpl getBundle()
+    @Override
+    public FrameworkImpl getBundle()
     {
-        return bundle;
+        return framework;
     }
 
-    private FrameworkImpl getFramework()
-    {
-        return getBundle().getFramework();
-    }
-
+    @Override
     public int getInitialBundleStartLevel()
     {
         int initialBundleStartLevel = this.initialBundleStartLevel;
 
         if (initialBundleStartLevel == 0)
+        {
             initialBundleStartLevel = 1;
+        }
         return initialBundleStartLevel;
     }
 
+    @Override
     public synchronized int getStartLevel()
     {
         return startLevel;
     }
 
     public void internalSetStartLevel(
-            int startLevel,
-            FrameworkListener... listeners)
+        int startLevel,
+        FrameworkListener... listeners)
     {
         if (startLevel < 0)
+        {
             throw new IllegalArgumentException("startLevel");
+        }
 
-        executor.execute(new Command(startLevel, listeners));
+        ForkJoinPool.commonPool().execute(new Command(startLevel, listeners));
     }
 
+    @Override
     public void setInitialBundleStartLevel(int initialBundleStartLevel)
     {
         if (initialBundleStartLevel <= 0)
+        {
             throw new IllegalArgumentException("initialBundleStartLevel");
+        }
 
         this.initialBundleStartLevel = initialBundleStartLevel;
     }
 
+    @Override
     public void setStartLevel(int startLevel, FrameworkListener... listeners)
     {
         if (startLevel == 0)
+        {
             throw new IllegalArgumentException("startLevel");
+        }
 
         internalSetStartLevel(startLevel, listeners);
-    }
-
-    public void stop()
-    {
-        executor.shutdownNow();
     }
 
     private class Command
@@ -113,56 +110,55 @@ public class FrameworkStartLevelImpl
             this.listeners = listeners;
         }
 
+        @Override
         public void run()
         {
             int startLevel = getStartLevel();
-            FrameworkImpl framework = getFramework();
-
             if (startLevel < this.startLevel)
             {
                 for (int intermediateStartLevel = startLevel + 1;
-                        intermediateStartLevel <= this.startLevel;
-                        intermediateStartLevel++)
+                    intermediateStartLevel <= this.startLevel;
+                    intermediateStartLevel++)
                 {
                     int oldStartLevel = getStartLevel();
-                    int newStartLevel = intermediateStartLevel;
 
                     framework.startLevelChanging(
-                            oldStartLevel, newStartLevel,
-                            listeners);
+                        oldStartLevel, intermediateStartLevel
+                    );
                     synchronized (FrameworkStartLevelImpl.this)
                     {
-                        FrameworkStartLevelImpl.this.startLevel = newStartLevel;
+                        FrameworkStartLevelImpl.this.startLevel =
+                            intermediateStartLevel;
                     }
                     framework.startLevelChanged(
-                            oldStartLevel, newStartLevel,
-                            listeners);
+                        oldStartLevel, intermediateStartLevel,
+                        listeners);
                 }
             }
             else if (this.startLevel < startLevel)
             {
                 for (int intermediateStartLevel = startLevel;
-                        intermediateStartLevel > this.startLevel;
-                        intermediateStartLevel--)
+                    intermediateStartLevel > this.startLevel;
+                    intermediateStartLevel--)
                 {
                     int oldStartLevel = getStartLevel();
                     int newStartLevel = intermediateStartLevel - 1;
 
                     framework.startLevelChanging(
-                            oldStartLevel, newStartLevel,
-                            listeners);
+                        oldStartLevel, newStartLevel
+                    );
                     synchronized (FrameworkStartLevelImpl.this)
                     {
                         FrameworkStartLevelImpl.this.startLevel = newStartLevel;
                     }
                     framework.startLevelChanged(
-                            oldStartLevel, newStartLevel,
-                            listeners);
+                        oldStartLevel, newStartLevel,
+                        listeners);
                 }
             }
             else
             {
-                framework.startLevelChanging(startLevel, startLevel, listeners);
+                framework.startLevelChanging(startLevel, startLevel);
                 framework.startLevelChanged(startLevel, startLevel, listeners);
             }
         }

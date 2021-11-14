@@ -15,27 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.jitsi.impl.osgi.framework;
+package org.jitsi.osgi.framework;
 
 import org.osgi.framework.*;
 
 /**
- *
+ * Represents an accessor to a specialized {@link Bundle}.
  */
-public class Bundle1
-    implements BundleActivator
+public interface BundleActivatorHolder
 {
-    public static BundleContext bundleContext;
-
-    @Override
-    public void start(BundleContext context)
-    {
-        bundleContext = context;
-    }
-
-    @Override
-    public void stop(BundleContext context)
-    {
-        bundleContext = null;
-    }
+    /**
+     * Registers a {@link BundleActivator} with this instance.
+     *
+     * @param bundleActivator the Activator to register with this bundle.
+     */
+    void addBundleActivator(Class<? extends BundleActivator> bundleActivator);
 }

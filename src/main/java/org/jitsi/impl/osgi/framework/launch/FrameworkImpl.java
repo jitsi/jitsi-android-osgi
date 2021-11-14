@@ -17,19 +17,17 @@
  */
 package org.jitsi.impl.osgi.framework.launch;
 
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.logging.*;
 import org.jitsi.impl.osgi.framework.*;
 import org.jitsi.impl.osgi.framework.startlevel.*;
-import org.osgi.framework.*;
 import org.osgi.framework.Filter;
+import org.osgi.framework.*;
 import org.osgi.framework.launch.*;
 import org.osgi.framework.startlevel.*;
 
-import java.io.*;
-import java.util.*;
-import java.util.logging.*;
-
 /**
- *
  * @author Lyubomir Marinov
  * @author Pawel Domas
  */
@@ -38,23 +36,19 @@ public class FrameworkImpl
     implements Framework
 {
     /**
-     *
-     */
-    public static boolean killAfterShutdown = false;
-
-    /**
      * The logger
      */
     private final Logger logger
         = Logger.getLogger(FrameworkImpl.class.getName());
 
-    private final List<BundleImpl> bundles = new LinkedList<BundleImpl>();
+    private final List<BundleImpl> bundles = new LinkedList<>();
 
     private final Map<String, String> configuration;
 
     private EventDispatcher eventDispatcher;
 
-    private FrameworkStartLevelImpl frameworkStartLevel;
+    private final FrameworkStartLevelImpl frameworkStartLevel
+        = new FrameworkStartLevelImpl(this);
 
     private long nextBundleId = 1;
 
@@ -63,7 +57,13 @@ public class FrameworkImpl
     private final List<ServiceRegistrationImpl<?>> serviceRegistrations
         = new LinkedList<>();
 
-    public FrameworkImpl(Map<String, String> configuration, ClassLoader classLoader)
+    private final Object stopEvent = new Object();
+
+    private final List<FrameworkListener> frameworkListeners =
+        Collections.synchronizedList(new ArrayList<>());
+
+    public FrameworkImpl(Map<String, String> configuration,
+        ClassLoader classLoader)
     {
         super(null, 0, null, classLoader);
 
@@ -73,44 +73,41 @@ public class FrameworkImpl
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <A> A adapt(Class<A> type)
     {
-        Object adapt;
-
         if (FrameworkStartLevel.class.equals(type))
         {
-            synchronized (this)
-            {
-                if (frameworkStartLevel == null)
-                    frameworkStartLevel = new FrameworkStartLevelImpl(this);
-
-                adapt = frameworkStartLevel;
-            }
+            return (A) frameworkStartLevel;
         }
-        else
-            adapt = null;
 
-        @SuppressWarnings("unchecked")
-        A a = (A) adapt;
-
-        return (a != null) ? a : super.adapt(type);
+        return super.adapt(type);
     }
 
     public void addBundleListener(BundleImpl origin, BundleListener listener)
     {
         if (eventDispatcher != null)
+        {
             eventDispatcher.addListener(origin, BundleListener.class, listener,
                 null);
+        }
     }
 
     public void addServiceListener(
-            BundleImpl origin,
-            ServiceListener listener,
-            Filter filter)
+        BundleImpl origin,
+        ServiceListener listener,
+        Filter filter)
     {
         if (eventDispatcher != null)
+        {
             eventDispatcher.addListener(origin, ServiceListener.class, listener,
                 filter);
+        }
+    }
+
+    public void addFrameworkListener(FrameworkListener listener)
+    {
+        frameworkListeners.add(listener);
     }
 
     public void fireBundleEvent(int type, Bundle bundle)
@@ -121,57 +118,76 @@ public class FrameworkImpl
     private void fireBundleEvent(int type, Bundle bundle, Bundle origin)
     {
         if (eventDispatcher != null)
+        {
             eventDispatcher.fireBundleEvent(
-                    new BundleEvent(type, bundle, origin));
+                new BundleEvent(type, bundle, origin));
+        }
     }
 
     private void fireFrameworkEvent(int type, FrameworkListener... listeners)
     {
-        if ((listeners != null) && (listeners.length != 0))
+        FrameworkEvent event = new FrameworkEvent(type, this, null);
+        if (listeners != null && listeners.length != 0)
         {
-            FrameworkEvent event = new FrameworkEvent(type, this, null);
-
             for (FrameworkListener listener : listeners)
+            {
                 try
                 {
                     listener.frameworkEvent(event);
                 }
-                catch (Throwable t)
+                catch (Exception t)
                 {
-                    if (type != FrameworkEvent.ERROR)
-                    {
-                        // TODO Auto-generated method stub
-                    }
                     logger.log(Level.SEVERE, "Error firing framework event", t);
                 }
+            }
+        }
+
+        for (FrameworkListener listener : frameworkListeners)
+        {
+            try
+            {
+                listener.frameworkEvent(event);
+            }
+            catch (Exception t)
+            {
+                logger.log(Level.SEVERE, "Error firing framework event", t);
+            }
         }
     }
 
     private void fireServiceEvent(int type, ServiceReference<?> reference)
     {
         if (eventDispatcher != null)
+        {
             eventDispatcher.fireServiceEvent(new ServiceEvent(type, reference));
+        }
     }
 
     public BundleImpl getBundle(long id)
     {
-    	if (id == 0)
-    		return this;
-    	else
-    	{
-	    	synchronized (this.bundles)
-	    	{
-	    		for (BundleImpl bundle : this.bundles)
-	    			if (bundle.getBundleId() == id)
-	    				return bundle;
-	    	}
-	    	return null;
-    	}
+        if (id == 0)
+        {
+            return this;
+        }
+        else
+        {
+            synchronized (this.bundles)
+            {
+                for (BundleImpl bundle : this.bundles)
+                {
+                    if (bundle.getBundleId() == id)
+                    {
+                        return bundle;
+                    }
+                }
+            }
+            return null;
+        }
     }
 
     private List<BundleImpl> getBundlesByStartLevel(int startLevel)
     {
-        List<BundleImpl> bundles = new LinkedList<BundleImpl>();
+        List<BundleImpl> bundles = new LinkedList<>();
 
         synchronized (this.bundles)
         {
@@ -180,20 +196,22 @@ public class FrameworkImpl
                 BundleStartLevel bundleStartLevel
                     = bundle.adapt(BundleStartLevel.class);
 
-                if ((bundleStartLevel != null)
-                        && (bundleStartLevel.getStartLevel() == startLevel))
+                if (bundleStartLevel != null
+                    && bundleStartLevel.getStartLevel() == startLevel)
+                {
                     bundles.add(bundle);
+                }
             }
         }
         return bundles;
     }
 
+    @SuppressWarnings("unchecked")
     public <S> Collection<ServiceReference<S>> getServiceReferences(
-            BundleImpl origin,
-            Class<S> clazz,
-            String className,
-            Filter filter,
-            boolean checkAssignable)
+        BundleImpl origin,
+        String className,
+        Filter filter,
+        boolean checkAssignable)
         throws InvalidSyntaxException
     {
         Filter classNameFilter
@@ -201,28 +219,22 @@ public class FrameworkImpl
             '('
                 + Constants.OBJECTCLASS
                 + '='
-                + ((className == null) ? '*' : className)
+                + (className == null ? '*' : className)
                 + ')');
-        List<ServiceReference<S>> serviceReferences
-            = new LinkedList<>();
 
+        List<ServiceReference<S>> serviceReferences = new LinkedList<>();
         synchronized (serviceRegistrations)
         {
-            for (ServiceRegistrationImpl<?> serviceRegistration
-                    : serviceRegistrations)
+            for (var serviceRegistration : serviceRegistrations)
             {
                 ServiceReference<S> serviceReference
                     = (ServiceReference<S>) serviceRegistration.getReference();
 
                 if (classNameFilter.match(serviceReference)
-                        && ((filter == null)
-                                || (filter.match(serviceReference))))
+                    && (filter == null
+                    || filter.match(serviceReference)))
                 {
-                    ServiceReference<S> serviceReferenceS
-                        = (ServiceReference<S>) serviceRegistration.getReference();
-
-                    if (serviceReferenceS != null)
-                        serviceReferences.add(serviceReferenceS);
+                    serviceReferences.add(serviceReference);
                 }
             }
         }
@@ -245,23 +257,28 @@ public class FrameworkImpl
     public void init()
         throws BundleException
     {
-        setState(STARTING);
+        init((FrameworkListener[]) null);
     }
 
     @Override
     public void init(FrameworkListener... listeners)
         throws BundleException
     {
-        throw new UnsupportedOperationException();
+        if (listeners != null)
+        {
+            frameworkListeners.addAll(Arrays.asList(listeners));
+        }
+
+        setState(STARTING);
     }
 
-    public Bundle installBundle(
-            BundleImpl origin,
-            String location, InputStream input)
+    public Bundle installBundle(BundleImpl origin, String location)
         throws BundleException
     {
         if (location == null)
+        {
             throw new BundleException("location");
+        }
 
         BundleImpl bundle = null;
         boolean fireBundleEvent = false;
@@ -269,41 +286,48 @@ public class FrameworkImpl
         synchronized (bundles)
         {
             for (BundleImpl existing : bundles)
+            {
                 if (existing.getLocation().equals(location))
                 {
                     bundle = existing;
                     break;
                 }
+            }
             if (bundle == null)
             {
                 bundle
                     = new BundleImpl(
-                            getFramework(),
-                            getNextBundleId(),
-                            location,
-                            classLoader);
+                    getFramework(),
+                    getNextBundleId(),
+                    location,
+                    classLoader);
                 bundles.add(bundle);
                 fireBundleEvent = true;
             }
         }
 
         if (fireBundleEvent)
+        {
             fireBundleEvent(BundleEvent.INSTALLED, bundle, origin);
+        }
 
         return bundle;
     }
 
     public <T> ServiceRegistration<T> registerService(
-            BundleImpl origin,
-            Class<T> clazz,
-            String[] classNames,
-            T service,
-            Dictionary<String, ?> properties)
+        BundleImpl origin,
+        String[] classNames,
+        T service,
+        Dictionary<String, ?> properties)
     {
-        if ((classNames == null) || (classNames.length == 0))
+        if (classNames == null || classNames.length == 0)
+        {
             throw new IllegalArgumentException("classNames");
-        else  if (service == null)
+        }
+        else if (service == null)
+        {
             throw new IllegalArgumentException("service");
+        }
         else
         {
             Class<?> serviceClass = service.getClass();
@@ -320,31 +344,18 @@ public class FrameworkImpl
                     try
                     {
                         if (Class.forName(className, false, classLoader)
-                                .isAssignableFrom(serviceClass))
+                            .isAssignableFrom(serviceClass))
                         {
                             illegalArgumentException = false;
                         }
                     }
-                    catch (ClassNotFoundException cnfe)
-                    {
-                        cause = cnfe;
-                    }
-                    catch (ExceptionInInitializerError eiie)
+                    catch (ClassNotFoundException | LinkageError eiie)
                     {
                         cause = eiie;
                     }
-                    catch (LinkageError le)
-                    {
-                        cause = le;
-                    }
                     if (illegalArgumentException)
                     {
-                        IllegalArgumentException iae
-                            = new IllegalArgumentException(className);
-
-                        if (cause != null)
-                            iae.initCause(cause);
-                        throw iae;
+                        throw new IllegalArgumentException(className, cause);
                     }
                 }
             }
@@ -358,39 +369,48 @@ public class FrameworkImpl
         }
 
         ServiceRegistrationImpl<T> serviceRegistration
-            = new ServiceRegistrationImpl(
-                    origin,
-                    serviceId,
-                    classNames, service, properties);
+            = new ServiceRegistrationImpl<>(
+            origin,
+            serviceId,
+            classNames, service, properties);
 
         synchronized (serviceRegistrations)
         {
             serviceRegistrations.add(serviceRegistration);
         }
         fireServiceEvent(
-                ServiceEvent.REGISTERED,
-                serviceRegistration.getReference());
+            ServiceEvent.REGISTERED,
+            serviceRegistration.getReference());
         return serviceRegistration;
     }
 
     public void removeBundleListener(BundleImpl origin, BundleListener listener)
     {
         if (eventDispatcher != null)
+        {
             eventDispatcher.removeListener(
-                    origin,
-                    BundleListener.class,
-                    listener);
+                origin,
+                BundleListener.class,
+                listener);
+        }
     }
 
     public void removeServiceListener(
-            BundleImpl origin,
-            ServiceListener listener)
+        BundleImpl origin,
+        ServiceListener listener)
     {
         if (eventDispatcher != null)
+        {
             eventDispatcher.removeListener(
-                    origin,
-                    ServiceListener.class,
-                    listener);
+                origin,
+                ServiceListener.class,
+                listener);
+        }
+    }
+
+    public void removeFrameworkListener(FrameworkListener listener)
+    {
+        frameworkListeners.remove(listener);
     }
 
     @Override
@@ -399,7 +419,7 @@ public class FrameworkImpl
     {
         int state = getState();
 
-        if ((state == INSTALLED) || (state == RESOLVED))
+        if (state == INSTALLED || state == RESOLVED)
         {
             init();
             state = getState();
@@ -408,65 +428,47 @@ public class FrameworkImpl
         if (state == STARTING)
         {
             int startLevel = 1;
-
             if (configuration != null)
             {
-                String s
-                    = configuration.get(
-                            Constants.FRAMEWORK_BEGINNING_STARTLEVEL);
-
+                var s =
+                    configuration.get(Constants.FRAMEWORK_BEGINNING_STARTLEVEL);
                 if (s != null)
+                {
                     try
                     {
                         startLevel = Integer.parseInt(s);
                     }
                     catch (NumberFormatException nfe)
                     {
+                        // ignore, keep default start level
                     }
+                }
             }
 
-            FrameworkStartLevel frameworkStartLevel
-                = adapt(FrameworkStartLevel.class);
-            FrameworkListener listener
-                = new FrameworkListener()
-                {
-                    @Override
-                    public void frameworkEvent(FrameworkEvent event)
-                    {
-                        synchronized (this)
-                        {
-                            notifyAll();
-                        }
-                    }
-                };
-
-            frameworkStartLevel.setStartLevel(
-                    startLevel,
-                    new FrameworkListener[] { listener });
-            synchronized (listener)
+            var startLevelAwaiter = new Semaphore(0);
+            frameworkStartLevel.setStartLevel(startLevel,
+                event -> startLevelAwaiter.release());
+            while (frameworkStartLevel.getStartLevel() < startLevel)
             {
-                boolean interrupted = false;
-
-                while (frameworkStartLevel.getStartLevel() < startLevel)
-                    try
-                    {
-                        listener.wait();
-                    }
-                    catch (InterruptedException ie)
-                    {
-                        interrupted = true;
-                    }
-                if (interrupted)
+                try
+                {
+                    startLevelAwaiter.acquire();
+                }
+                catch (InterruptedException ie)
+                {
                     Thread.currentThread().interrupt();
+                    return;
+                }
             }
 
             setState(ACTIVE);
+            fireFrameworkEvent(FrameworkEvent.STARTED);
         }
     }
 
     public void startLevelChanged(
-            int oldStartLevel, int newStartLevel,
-            FrameworkListener... listeners)
+        int oldStartLevel, int newStartLevel,
+        FrameworkListener... listeners)
     {
         if (oldStartLevel < newStartLevel)
         {
@@ -478,16 +480,10 @@ public class FrameworkImpl
                         = bundle.adapt(BundleStartLevel.class);
                     int options = START_TRANSIENT;
 
-                    if (bundleStartLevel.isActivationPolicyUsed())
-                        options |= START_ACTIVATION_POLICY;
                     bundle.start(options);
                 }
-                catch (Throwable t)
+                catch (Exception t)
                 {
-                    if (t instanceof ThreadDeath)
-                        throw (ThreadDeath) t;
-                    // TODO Auto-generated method stub
-
                     logger.log(Level.SEVERE, "Error changing start level", t);
                 }
             }
@@ -496,9 +492,7 @@ public class FrameworkImpl
         fireFrameworkEvent(FrameworkEvent.STARTLEVEL_CHANGED, listeners);
     }
 
-    public void startLevelChanging(
-            int oldStartLevel, int newStartLevel,
-            FrameworkListener... listeners)
+    public void startLevelChanging(int oldStartLevel, int newStartLevel)
     {
         if (oldStartLevel > newStartLevel)
         {
@@ -508,12 +502,8 @@ public class FrameworkImpl
                 {
                     bundle.stop(STOP_TRANSIENT);
                 }
-                catch (Throwable t)
+                catch (Exception t)
                 {
-                    if (t instanceof ThreadDeath)
-                        throw (ThreadDeath) t;
-                    // TODO Auto-generated method stub
-
                     logger.log(Level.SEVERE, "Error changing start level", t);
                 }
             }
@@ -526,19 +516,7 @@ public class FrameworkImpl
         switch (newState)
         {
         case RESOLVED:
-            if (eventDispatcher != null)
-            {
-                eventDispatcher.stop();
-                eventDispatcher = null;
-            }
-            synchronized (this)
-            {
-                if (frameworkStartLevel != null)
-                {
-                    frameworkStartLevel.stop();
-                    frameworkStartLevel = null;
-                }
-            }
+            eventDispatcher = null;
             break;
         case STARTING:
             eventDispatcher = new EventDispatcher();
@@ -552,64 +530,38 @@ public class FrameworkImpl
     public void stop(int options)
         throws BundleException
     {
-        final FrameworkStartLevelImpl frameworkStartLevel
-            = (FrameworkStartLevelImpl) adapt(FrameworkStartLevel.class);
-
-        new Thread(getClass().getName() + ".stop")
+        ForkJoinPool.commonPool().execute(() ->
         {
-            @Override
-            public void run()
+            setState(STOPPING);
+
+            var startLevelAwaiter = new Semaphore(0);
+            frameworkStartLevel.internalSetStartLevel(0,
+                event -> startLevelAwaiter.release());
+            while (frameworkStartLevel.getStartLevel() != 0)
             {
-                FrameworkImpl framework = FrameworkImpl.this;
-
-                framework.setState(STOPPING);
-
-                FrameworkListener listener
-                    = new FrameworkListener()
-                    {
-                        @Override
-                        public void frameworkEvent(FrameworkEvent event)
-                        {
-                            synchronized (this)
-                            {
-                                notifyAll();
-                            }
-                        }
-                    };
-
-                frameworkStartLevel.internalSetStartLevel(0, listener);
-                synchronized (listener)
+                try
                 {
-                    boolean interrupted = false;
-
-                    while (frameworkStartLevel.getStartLevel() != 0)
-                        try
-                        {
-                            listener.wait();
-                        }
-                        catch (InterruptedException ie)
-                        {
-                            interrupted = true;
-                        }
-                    if (interrupted)
-                        Thread.currentThread().interrupt();
+                    startLevelAwaiter.acquire();
                 }
-
-                framework.setState(RESOLVED);
-                if (killAfterShutdown)
+                catch (InterruptedException ie)
                 {
-                    // Kills the process to clear static fields,
-                    // before next restart
-                    System.exit(0);
+                    Thread.currentThread().interrupt();
+                    return;
                 }
             }
-        }
-            .start();
+
+            setState(RESOLVED);
+            fireFrameworkEvent(FrameworkEvent.STOPPED);
+            synchronized (stopEvent)
+            {
+                stopEvent.notifyAll();
+            }
+        });
     }
 
     public void unregisterService(
-            BundleImpl origin,
-            ServiceRegistration<?> serviceRegistration)
+        BundleImpl origin,
+        ServiceRegistration<?> serviceRegistration)
     {
         boolean removed;
 
@@ -621,20 +573,22 @@ public class FrameworkImpl
         if (removed)
         {
             fireServiceEvent(
-                    ServiceEvent.UNREGISTERING,
-                    serviceRegistration.getReference());
+                ServiceEvent.UNREGISTERING,
+                serviceRegistration.getReference());
         }
         else
+        {
             throw new IllegalStateException("serviceRegistrations");
+        }
     }
 
     @Override
     public ServiceReference<?>[] getRegisteredServices()
     {
         ServiceReference<?>[] references
-                = new ServiceReference[serviceRegistrations.size()];
+            = new ServiceReference<?>[serviceRegistrations.size()];
 
-        for(int i=0; i<serviceRegistrations.size(); i++)
+        for (int i = 0; i < serviceRegistrations.size(); i++)
         {
             references[i] = serviceRegistrations.get(i).getReference();
         }
@@ -646,7 +600,17 @@ public class FrameworkImpl
     public FrameworkEvent waitForStop(long timeout)
         throws InterruptedException
     {
-        // TODO Auto-generated method stub
-        return null;
+        var start = System.nanoTime();
+        var timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeout);
+        synchronized (stopEvent)
+        {
+            while (getState() != RESOLVED
+                && (System.nanoTime() - start) > timeoutNanos)
+            {
+                stopEvent.wait(timeout);
+            }
+        }
+
+        return new FrameworkEvent(FrameworkEvent.STOPPED, this, null);
     }
 }

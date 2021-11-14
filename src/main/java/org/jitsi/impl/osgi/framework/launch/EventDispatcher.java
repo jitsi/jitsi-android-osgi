@@ -17,26 +17,20 @@
  */
 package org.jitsi.impl.osgi.framework.launch;
 
-import org.jitsi.impl.osgi.framework.*;
-import org.osgi.framework.*;
-
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.*;
 import org.osgi.framework.Filter;
+import org.osgi.framework.*;
 
 /**
- *
  * @author Lyubomir Marinov
  * @author Pawel Domas
  */
 public class EventDispatcher
 {
     private static final Logger logger
-            = Logger.getLogger(EventDispatcher.class.getName());
-
-    private final AsyncExecutor<Command> executor
-        = new AsyncExecutor<Command>();
+        = Logger.getLogger(EventDispatcher.class.getName());
 
     private final EventListenerList listeners = new EventListenerList();
 
@@ -49,34 +43,10 @@ public class EventDispatcher
         return listeners.add(bundle, clazz, listener, filter);
     }
 
-    void fireBundleEvent(BundleEvent event)
-    {
-        fireEvent(BundleListener.class, event);
-    }
-
-    private <T extends EventListener> void fireEvent(
-            Class<T> clazz,
-            EventObject event)
-    {
-        try
-        {
-            executor.execute(new Command(clazz, event));
-        }
-        catch (RejectedExecutionException ree)
-        {
-            logger.log(Level.SEVERE, "Error firing event", ree);
-        }
-    }
-
-    void fireServiceEvent(ServiceEvent event)
-    {
-        fireEvent(ServiceListener.class, event);
-    }
-
     public <T extends EventListener> boolean removeListener(
-            Bundle bundle,
-            Class<T> clazz,
-            T listener)
+        Bundle bundle,
+        Class<T> clazz,
+        T listener)
     {
         return listeners.remove(bundle, clazz, listener);
     }
@@ -86,9 +56,33 @@ public class EventDispatcher
         return listeners.removeAll(bundle);
     }
 
-    public void stop()
+    void fireBundleEvent(BundleEvent event)
     {
-        executor.shutdownNow();
+        fireEvent(BundleListener.class, event);
+    }
+
+    void fireServiceEvent(ServiceEvent event)
+    {
+        fireEvent(ServiceListener.class, event);
+    }
+
+    void fireFrameworkEvent(FrameworkEvent event)
+    {
+        fireEvent(FrameworkListener.class, event);
+    }
+
+    private <T extends EventListener> void fireEvent(
+        Class<T> clazz,
+        EventObject event)
+    {
+        try
+        {
+            ForkJoinPool.commonPool().execute(new Command(clazz, event));
+        }
+        catch (RejectedExecutionException ree)
+        {
+            logger.log(Level.SEVERE, "Error firing event", ree);
+        }
     }
 
     private class Command
@@ -99,8 +93,8 @@ public class EventDispatcher
         private final EventObject event;
 
         public <T extends EventListener> Command(
-                Class<T> clazz,
-                EventObject event)
+            Class<T> clazz,
+            EventObject event)
         {
             this.clazz = clazz;
             this.event = event;
@@ -109,9 +103,9 @@ public class EventDispatcher
         public void run()
         {
             // Fetches listeners before command is started
-            // to get latest version of the list
-            List<? extends EventListener> listeners
-                    = EventDispatcher.this.listeners.getListeners(clazz, event);
+            // to get the latest version of the list
+            var listeners
+                = EventDispatcher.this.listeners.getListeners(clazz, event);
 
             for (EventListener listener : listeners)
             {
@@ -120,23 +114,22 @@ public class EventDispatcher
                     if (BundleListener.class.equals(clazz))
                     {
                         ((BundleListener) listener).bundleChanged(
-                                (BundleEvent) event);
+                            (BundleEvent) event);
                     }
                     else if (ServiceListener.class.equals(clazz))
                     {
                         ((ServiceListener) listener).serviceChanged(
-                                (ServiceEvent) event);
+                            (ServiceEvent) event);
+                    }
+                    else if (FrameworkListener.class.equals(clazz))
+                    {
+                        ((FrameworkListener) listener).frameworkEvent(
+                            (FrameworkEvent) event);
                     }
                 }
                 catch (Throwable t)
                 {
                     logger.log(Level.SEVERE, "Error dispatching event", t);
-                    if (FrameworkListener.class.equals(clazz)
-                            && ((FrameworkEvent) event).getType()
-                                    != FrameworkEvent.ERROR)
-                    {
-                        // TODO Auto-generated method stub
-                    }
                 }
             }
         }

@@ -17,14 +17,12 @@
  */
 package org.jitsi.impl.osgi.framework;
 
+import java.io.*;
+import java.util.*;
 import org.jitsi.impl.osgi.framework.launch.*;
 import org.osgi.framework.*;
 
-import java.io.*;
-import java.util.*;
-
 /**
- *
  * @author Lyubomir Marinov
  */
 public class BundleContextImpl
@@ -49,7 +47,7 @@ public class BundleContextImpl
     @Override
     public void addFrameworkListener(FrameworkListener listener)
     {
-        // TODO Auto-generated method stub
+        framework.addFrameworkListener(listener);
     }
 
     @Override
@@ -70,9 +68,9 @@ public class BundleContextImpl
         throws InvalidSyntaxException
     {
         framework.addServiceListener(
-                getBundle(),
-                listener,
-                (filter == null) ? null : createFilter(filter));
+            getBundle(),
+            listener,
+            filter == null ? null : createFilter(filter));
     }
 
     @Override
@@ -80,15 +78,6 @@ public class BundleContextImpl
         throws InvalidSyntaxException
     {
         return FrameworkUtil.createFilter(filter);
-    }
-
-    @Override
-    public ServiceReference<?>[] getAllServiceReferences(
-            String className,
-            String filter)
-        throws InvalidSyntaxException
-    {
-        return getServiceReferences(className, filter, false);
     }
 
     @Override
@@ -106,48 +95,50 @@ public class BundleContextImpl
     @Override
     public Bundle getBundle(String location)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public Bundle[] getBundles()
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public File getDataFile(String filename)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public String getProperty(String key)
     {
-        // TODO Auto-generated method stub
-        return null;
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public <S> S getService(ServiceReference<S> reference)
     {
         return
-            (S) ((ServiceRegistrationImpl.ServiceReferenceImpl) reference)
+            ((ServiceRegistrationImpl<S>.ServiceReferenceImpl) reference)
                 .getService();
     }
 
     @Override
     public <S> ServiceReference<S> getServiceReference(Class<S> clazz)
     {
-        return getServiceReference(clazz, clazz.getName());
+        return getServiceReferenceInternal(clazz.getName());
     }
 
-    private <S> ServiceReference<S> getServiceReference(
-            Class<S> clazz,
-            String className)
+    @Override
+    public ServiceReference<?> getServiceReference(String className)
+    {
+        return getServiceReferenceInternal(className);
+    }
+
+    @SuppressWarnings("unchecked")
+    private <S> ServiceReference<S> getServiceReferenceInternal(
+        String className)
     {
         ServiceReference<S>[] serviceReferences;
 
@@ -158,70 +149,57 @@ public class BundleContextImpl
         }
         catch (InvalidSyntaxException ise)
         {
-            // No InvlidSyntaxException is expected because the filter is null.
+            // No InvalidSyntaxException is expected because the filter is null.
             serviceReferences = null;
         }
 
         return
-            ((serviceReferences == null) || (serviceReferences.length == 0))
+            serviceReferences == null || serviceReferences.length == 0
                 ? null
                 : serviceReferences[0];
     }
 
     @Override
-    public ServiceReference<?> getServiceReference(String className)
-    {
-        return getServiceReference(Object.class, className);
-    }
-
-    @Override
     public <S> Collection<ServiceReference<S>> getServiceReferences(
-            Class<S> clazz,
-            String filter)
+        Class<S> clazz,
+        String filter)
         throws InvalidSyntaxException
     {
-        return getServiceReferences(clazz, clazz.getName(), filter, true);
-    }
-
-    private <S> Collection<ServiceReference<S>> getServiceReferences(
-            Class<S> clazz,
-            String className,
-            String filter,
-            boolean checkAssignable)
-        throws InvalidSyntaxException
-    {
-        return
-            framework.getServiceReferences(
-                    getBundle(),
-                    clazz,
-                    className,
-                    (filter == null) ? null : createFilter(filter),
-                    checkAssignable);
+        return getServiceReferences(clazz.getName(), filter, true);
     }
 
     @Override
     public ServiceReference<?>[] getServiceReferences(
-            String className,
-            String filter)
+        String className,
+        String filter)
         throws InvalidSyntaxException
     {
-        return getServiceReferences(className, filter, true);
+        return getServiceReferences(className, filter, true)
+            .toArray(new ServiceReference<?>[0]);
     }
 
-    private <S> ServiceReference<S>[] getServiceReferences(
-            String className,
-            String filter,
-            boolean checkAssignable)
+    @Override
+    public ServiceReference<?>[] getAllServiceReferences(
+        String className,
+        String filter)
         throws InvalidSyntaxException
     {
-        Collection<ServiceReference<Object>> serviceReferences
-            = getServiceReferences(
-                    Object.class,
-                    className,
-                    filter,
-                    checkAssignable);
+        return getServiceReferences(className, filter, false)
+            .toArray(new ServiceReference<?>[0]);
+    }
 
-        return serviceReferences.toArray(new ServiceReference[0]);
+    private <S> Collection<ServiceReference<S>> getServiceReferences(
+        String className,
+        String filter,
+        boolean checkAssignable)
+        throws InvalidSyntaxException
+    {
+        return
+            framework.getServiceReferences(
+                getBundle(),
+                className,
+                filter == null ? null : createFilter(filter),
+                checkAssignable);
     }
 
     @Override
@@ -235,19 +213,17 @@ public class BundleContextImpl
     public Bundle installBundle(String location, InputStream input)
         throws BundleException
     {
-        return framework.installBundle(getBundle(), location, input);
+        return framework.installBundle(getBundle(), location);
     }
 
     @Override
     public <S> ServiceRegistration<S> registerService(
-            Class<S> clazz,
-            S service,
-            Dictionary<String, ?> properties)
+        Class<S> clazz,
+        S service,
+        Dictionary<String, ?> properties)
     {
-        return
-            registerService(
-                    clazz,
-                    new String[] { clazz.getName() }, service, properties);
+        return framework.registerService(
+            getBundle(), new String[] { clazz.getName() }, service, properties);
     }
 
     @Override
@@ -257,35 +233,23 @@ public class BundleContextImpl
         throw new UnsupportedOperationException();
     }
 
-    private <S> ServiceRegistration<S> registerService(
-            Class<S> clazz,
-            String[] classNames,
-            S service,
-            Dictionary<String, ?> properties)
-    {
-        return
-            framework.registerService(
-                    getBundle(),
-                    clazz,
-                    classNames, service, properties);
-    }
-
     @Override
     public ServiceRegistration<?> registerService(
-            String className,
-            Object service,
-            Dictionary<String, ?> properties)
+        String className,
+        Object service,
+        Dictionary<String, ?> properties)
     {
         return registerService(new String[] { className }, service, properties);
     }
 
     @Override
     public ServiceRegistration<?> registerService(
-            String[] classNames,
-            Object service,
-            Dictionary<String, ?> properties)
+        String[] classNames,
+        Object service,
+        Dictionary<String, ?> properties)
     {
-        return registerService(Object.class, classNames, service, properties);
+        return framework.registerService(
+            getBundle(), classNames, service, properties);
     }
 
     @Override
@@ -297,7 +261,7 @@ public class BundleContextImpl
     @Override
     public void removeFrameworkListener(FrameworkListener listener)
     {
-        // TODO Auto-generated method stub
+        framework.removeFrameworkListener(listener);
     }
 
     @Override
@@ -309,8 +273,7 @@ public class BundleContextImpl
     @Override
     public boolean ungetService(ServiceReference<?> reference)
     {
-        // TODO Auto-generated method stub
-        return false;
+        throw new UnsupportedOperationException();
     }
 
     @Override
