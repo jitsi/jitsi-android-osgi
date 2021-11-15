@@ -17,25 +17,21 @@
  */
 package org.jitsi.impl.osgi.framework.launch;
 
+import java.util.*;
 import org.osgi.framework.launch.*;
 
-import java.util.*;
-
 /**
- *
  * @author Lyubomir Marinov
  */
 public class FrameworkFactoryImpl
     implements FrameworkFactory
 {
-
     private final ClassLoader classLoader;
 
     public FrameworkFactoryImpl(ClassLoader classLoader)
     {
         this.classLoader = classLoader;
     }
-
 
     public Framework newFramework(Map<String, String> configuration)
     {

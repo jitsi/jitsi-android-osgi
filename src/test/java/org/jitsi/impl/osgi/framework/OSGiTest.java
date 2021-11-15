@@ -15,71 +15,82 @@
  */
 package org.jitsi.impl.osgi.framework;
 
-import org.junit.*;
-import org.junit.runner.*;
-import org.junit.runners.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-import static org.junit.Assert.*;
+import java.lang.management.*;
+import java.time.*;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.logging.*;
+import org.jitsi.impl.osgi.framework.launch.*;
+import org.jitsi.osgi.framework.*;
+import org.junit.jupiter.api.*;
+import org.osgi.framework.*;
+import org.osgi.framework.launch.*;
+import org.osgi.framework.startlevel.*;
 
-/**
- *
- */
-@RunWith(JUnit4.class)
 public class OSGiTest
 {
-    private final static String[][] bundles = new String[][]
-        {
-            {
-                "org/jitsi/impl/osgi/framework/Bundle1"
-            },
-            {
-                "org/jitsi/impl/osgi/framework/Bundle2"
-            },
-            {
-                "org/jitsi/impl/osgi/framework/Bundle3"
-            },
-        };
-
     @Test
-    public void osgiLauncherTest()
+    @Timeout(value = 10)
+    public void osgiLauncherTest() throws BundleException, InterruptedException
     {
-        OSGiLauncher launcher
-            = new OSGiLauncher(bundles, ClassLoader.getSystemClassLoader());
+        var logger = Logger.getLogger(getClass().getName());
 
-        MockBundleActivator activator1 = new MockBundleActivator();
+        var options = new HashMap<String, String>();
+        options.put(Constants.FRAMEWORK_BEGINNING_STARTLEVEL, "2");
+        Framework fw = new FrameworkImpl(options, getClass().getClassLoader());
+        fw.init();
+        var bundleContext = fw.getBundleContext();
+        for (Class<? extends BundleActivator> activator : List.of(
+            Bundle1.class,
+            Bundle2.class,
+            Bundle3.class))
+        {
+            var url =
+                activator.getProtectionDomain().getCodeSource().getLocation()
+                    .toString();
+            var bundle = bundleContext.installBundle(url);
+            var startLevel = bundle.adapt(BundleStartLevel.class);
+            startLevel.setStartLevel(2);
+            var bundleActivator = bundle.adapt(BundleActivatorHolder.class);
+            bundleActivator.addBundleActivator(activator);
+        }
 
-        MockBundleActivator activator2 = new MockBundleActivator();
+        logger.info("Starting framework");
+        fw.start();
 
-        launcher.start(activator1);
-
-        // Wait for the activator to be started
-        assertTrue(activator1.waitToBeStarted());
-
-        assertNotNull(Bundle1.bundleContext);
-        assertNotNull(Bundle2.bundleContext);
-        assertTrue(Bundle3.waitToBeStarted());
-
-        launcher.start(activator2);
-
-        // It should be started
-        assertTrue(activator2.waitToBeStarted());
-
-        // Now shutdown after first instance bundles are
-        launcher.stop(activator1);
-        assertTrue(activator1.waitToBeStopped());
-
-        // Bunt the rest should still be running
+        logger.info("Waiting for bundle3");
+        assertTrue(Bundle3.waitToBeStarted(5000));
         assertNotNull(Bundle1.bundleContext);
         assertNotNull(Bundle2.bundleContext);
         assertNotNull(Bundle3.bundleContext);
-        assertTrue(activator2.isRunning());
 
-        // Now remove the last instance bundle and all bundles should stop
-        launcher.stop(activator2);
-        assertTrue(activator2.waitToBeStopped());
-        assertFalse(activator1.isRunning());
+        logger.info("Stopping framework");
+        fw.stop();
+
+        logger.info("Waiting for framework stop");
+        var fwEvent = assertTimeoutPreemptively(Duration.ofSeconds(5),
+            () -> fw.waitForStop(0),
+            () -> "Framework.state is " + fw.getState() + "\n" + threadDump(
+                true, true));
+        assertEquals(FrameworkEvent.STOPPED, fwEvent.getType());
         assertNull(Bundle1.bundleContext);
         assertNull(Bundle2.bundleContext);
         assertNull(Bundle3.bundleContext);
+    }
+
+    private static String threadDump(
+        boolean lockedMonitors,
+        boolean lockedSynchronizers)
+    {
+        var threadDump = new StringBuilder(System.lineSeparator());
+        var threadMXBean = ManagementFactory.getThreadMXBean();
+        for (ThreadInfo threadInfo : threadMXBean.dumpAllThreads(lockedMonitors,
+            lockedSynchronizers))
+        {
+            threadDump.append(threadInfo.toString());
+        }
+        return threadDump.toString();
     }
 }

@@ -19,9 +19,6 @@ package org.jitsi.impl.osgi.framework;
 
 import org.osgi.framework.*;
 
-/**
- *
- */
 public class Bundle3
     implements BundleActivator
 {
@@ -29,7 +26,6 @@ public class Bundle3
 
     @Override
     public void start(BundleContext context)
-        throws Exception
     {
         synchronized (Bundle3.class)
         {
@@ -39,16 +35,18 @@ public class Bundle3
         }
     }
 
-    public static boolean waitToBeStarted()
+    public static boolean waitToBeStarted(int timeoutMillis)
     {
         synchronized (Bundle3.class)
         {
             if (bundleContext != null)
+            {
                 return true;
+            }
 
             try
             {
-                Bundle3.class.wait();
+                Bundle3.class.wait(timeoutMillis);
             }
             catch (InterruptedException e)
             {
@@ -61,7 +59,6 @@ public class Bundle3
 
     @Override
     public void stop(BundleContext context)
-        throws Exception
     {
         synchronized (Bundle3.class)
         {
