@@ -27,7 +27,7 @@
   </developers>
 
   <scm>
-    <url>https://github.com/jitsi/jitsi-srtp</url>
+    <url>https://github.com/jitsi/jitsi-android-osgi</url>
     <connection>scm:git:https://github.com/jitsi/jitsi-android-osgi.git</connection>
     <developerConnection>scm:git:https://github.com/jitsi/jitsi-android-osgi.git</developerConnection>
     <tag>HEAD</tag>
@@ -84,7 +84,7 @@
           <source>11</source>
           <target>11</target>
           <compilerArgs>
-            <arg>-Xlint:all</arg>
+            <arg>-Xlint:all,-serial</arg>
           </compilerArgs>
         </configuration>
       </plugin>
@@ -107,6 +107,7 @@
         <version>3.3.1</version>
         <configuration>
           <doclint>none</doclint>
+          <source>11</source>
         </configuration>
       </plugin>
 
