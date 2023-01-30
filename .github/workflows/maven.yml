@@ -42,7 +42,7 @@ jobs:
 
       - name: Upload coverage report
         if: matrix.java == env.RELEASE_JAVA_VERSION
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
 
   release:
     if: github.ref == 'refs/heads/master'
