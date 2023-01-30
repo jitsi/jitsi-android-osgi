@@ -62,10 +62,12 @@ public class FrameworkImpl
     private final List<FrameworkListener> frameworkListeners =
         Collections.synchronizedList(new ArrayList<>());
 
-    public FrameworkImpl(Map<String, String> configuration,
-        ClassLoader classLoader)
+    public FrameworkImpl(Map<String, String> configuration, ClassLoader classLoader)
     {
-        super(null, 0, null, classLoader);
+        super(null,
+            0,
+            FrameworkImpl.class.getProtectionDomain().getCodeSource().getLocation().toString(),
+            classLoader);
 
         this.configuration = configuration;
 
@@ -206,6 +208,14 @@ public class FrameworkImpl
         return bundles;
     }
 
+    public Bundle[] getBundles()
+    {
+        synchronized(this.bundles)
+        {
+            return this.bundles.toArray(new Bundle[0]);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     public <S> Collection<ServiceReference<S>> getServiceReferences(
         BundleImpl origin,
@@ -326,7 +336,7 @@ public class FrameworkImpl
         }
         else if (service == null)
         {
-            throw new IllegalArgumentException("service");
+            throw new IllegalArgumentException("service is null for " + Arrays.toString(classNames));
         }
         else
         {
