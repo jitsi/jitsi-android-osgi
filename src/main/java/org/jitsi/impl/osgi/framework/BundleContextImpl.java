@@ -101,7 +101,7 @@ public class BundleContextImpl
     @Override
     public Bundle[] getBundles()
     {
-        throw new UnsupportedOperationException();
+        return framework.getBundles();
     }
 
     @Override
@@ -273,7 +273,7 @@ public class BundleContextImpl
     @Override
     public boolean ungetService(ServiceReference<?> reference)
     {
-        throw new UnsupportedOperationException();
+        return true;
     }
 
     @Override

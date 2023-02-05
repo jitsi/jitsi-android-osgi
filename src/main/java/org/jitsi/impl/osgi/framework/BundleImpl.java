@@ -22,7 +22,9 @@ import java.net.*;
 import java.nio.file.*;
 import java.security.cert.*;
 import java.util.*;
+import java.util.jar.*;
 import java.util.logging.*;
+import java.util.stream.*;
 import java.util.zip.*;
 import org.apache.commons.io.file.*;
 import org.apache.commons.io.filefilter.*;
@@ -47,6 +49,8 @@ public class BundleImpl
 
     private final List<BundleActivator> bundleActivators = new ArrayList<>();
 
+    private Dictionary<String, String> headers;
+
     private BundleContext bundleContext;
 
     private final long bundleId;
@@ -69,6 +73,30 @@ public class BundleImpl
         this.bundleId = bundleId;
         this.location = location;
         this.classLoader = classLoader;
+        var urls = findEntries("META-INF", "MANIFEST.MF", false);
+        if (urls.hasMoreElements())
+        {
+            var url = urls.nextElement();
+            try (var s = url.openStream())
+            {
+                var m = new Manifest(s);
+                this.headers = new Hashtable<>(m.getMainAttributes()
+                    .entrySet()
+                    .stream()
+                    .collect(Collectors.toMap(e -> e.getKey().toString(), e -> e.getValue().toString())));
+            }
+            catch (IOException ex)
+            {
+                this.headers = new Hashtable<>();
+                logger.log(Level.WARNING, "Could not read headers from manifest", ex);
+            }
+        }
+        else
+        {
+            this.headers = new Hashtable<>();
+        }
+
+        this.headers.put("Location", location);
     }
 
     @SuppressWarnings("unchecked")
@@ -105,6 +133,11 @@ public class BundleImpl
         String filePattern,
         boolean recurse)
     {
+        if (location == null)
+        {
+            return Collections.emptyEnumeration();
+        }
+
         File f;
         try
         {
@@ -114,7 +147,7 @@ public class BundleImpl
         {
             logger.log(Level.SEVERE,
                 "Could not get bundle URI from " + location, e);
-            return null;
+            return Collections.emptyEnumeration();
         }
         if (f.exists())
         {
@@ -127,7 +160,7 @@ public class BundleImpl
                 path += "/";
             }
 
-            Iterator<URL> matches;
+            List<URL> matches;
             if (f.isFile() && f.getName().endsWith(".jar"))
             {
                 matches = getJarEntries(path, filePattern, recurse, f);
@@ -140,38 +173,39 @@ public class BundleImpl
             {
                 logger.log(Level.SEVERE,
                     location + " is neither a file nor a directory");
-                return null;
+                return Collections.emptyEnumeration();
             }
 
             if (matches == null)
             {
-                return null;
+                return Collections.emptyEnumeration();
             }
 
+            var it = matches.iterator();
             return new Enumeration<>()
             {
                 @Override
                 public boolean hasMoreElements()
                 {
-                    return matches.hasNext();
+                    return it.hasNext();
                 }
 
                 @Override
                 public URL nextElement()
                 {
-                    return matches.next();
+                    return it.next();
                 }
             };
         }
-        return null;
+
+        return Collections.emptyEnumeration();
     }
 
-    private Iterator<URL> getJarEntries(String path, String filePattern,
+    private List<URL> getJarEntries(String path, String filePattern,
         boolean recurse, File f)
     {
-        try
+        try (var z = new ZipFile(f))
         {
-            var z = new ZipFile(f);
             var filter = new WildcardFileFilter(
                 filePattern == null ? "*" : filePattern);
             return z.stream()
@@ -191,7 +225,7 @@ public class BundleImpl
                     }
                 })
                 .filter(Objects::nonNull)
-                .iterator();
+                .collect(Collectors.toList());
         }
         catch (IOException e)
         {
@@ -200,7 +234,7 @@ public class BundleImpl
         }
     }
 
-    private Iterator<URL> getDirectoryEntries(String path, String filePattern,
+    private List<URL> getDirectoryEntries(String path, String filePattern,
         File f)
     {
         var fileFilter = new WildcardFileFilter(
@@ -209,7 +243,13 @@ public class BundleImpl
             FileFilterUtils.trueFileFilter());
         try
         {
-            Files.walkFileTree(new File(f, path).toPath(), visitor);
+            var dir = new File(f, path);
+            if (!dir.exists())
+            {
+                return Collections.emptyList();
+            }
+
+            Files.walkFileTree(dir.toPath(), visitor);
         }
         catch (IOException e)
         {
@@ -232,7 +272,7 @@ public class BundleImpl
                     }
                 })
                 .filter(Objects::nonNull)
-                .iterator();
+                .collect(Collectors.toList());
         }
         else
         {
@@ -285,7 +325,7 @@ public class BundleImpl
 
     public Dictionary<String, String> getHeaders(String locale)
     {
-        throw new UnsupportedOperationException();
+        return headers;
     }
 
     public long getLastModified()
@@ -332,7 +372,7 @@ public class BundleImpl
 
     public String getSymbolicName()
     {
-        throw new UnsupportedOperationException();
+        return Objects.requireNonNullElse(headers.get(Constants.BUNDLE_SYMBOLICNAME), Long.toString(bundleId));
     }
 
     public Version getVersion()
