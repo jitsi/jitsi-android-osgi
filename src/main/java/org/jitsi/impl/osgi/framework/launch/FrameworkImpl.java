@@ -310,7 +310,7 @@ public class FrameworkImpl
                     getFramework(),
                     getNextBundleId(),
                     location,
-                    classLoader);
+                    new BundleClassLoader(classLoader));
                 bundles.add(bundle);
                 fireBundleEvent = true;
             }

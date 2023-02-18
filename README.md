@@ -15,8 +15,7 @@ be manually listed and the "framework" must be told to start them.
 var activators = List.of(MyBundle.class);
 
 // then prepare the "framework"
-var options = new HashMap<String, String>();
-options.put(Constants.FRAMEWORK_BEGINNING_STARTLEVEL, "2");
+var options = Map.ofConstants.FRAMEWORK_BEGINNING_STARTLEVEL, "2");
 Framework fw = new FrameworkImpl(options, Main.class.getClassLoader());
 fw.init();
 var bundleContext = fw.getBundleContext();
@@ -33,3 +32,9 @@ for (Class<? extends BundleActivator> activator : activators) {
 fw.start();
 fw.waitForStop(0);
 ```
+
+## Native Libraries from Bundles
+
+To use bundles that declare native libraries in their manifest and are loading
+them via `System.loadLibrary(String)`, use the `BundleClassLoader` to run the
+framework init code. They should then work like in a full OSGi implementation.
