@@ -28,10 +28,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744  # v3
 
       - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62  # v3
         with:
           distribution: temurin
           java-version: ${{ matrix.java }}
@@ -42,7 +42,7 @@ jobs:
 
       - name: Upload coverage report
         if: matrix.java == env.RELEASE_JAVA_VERSION
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@ab904c41d6ece82784817410c45d8b8c02684457  # v3
 
   release:
     if: github.ref == 'refs/heads/master'
@@ -50,12 +50,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744  # v3
         with:
           fetch-depth: 0
 
       - name: Set up JDK
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@17f84c3641ba7b8f6deff6309fc4c864478f5d62  # v3
         with:
           distribution: temurin
           java-version: ${{ env.RELEASE_JAVA_VERSION }}
